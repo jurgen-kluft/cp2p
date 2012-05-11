@@ -40,7 +40,7 @@
 		<Item Src="target\${Name}\outdir\${Name}_TestRelease_${Platform}\${Name}_TestRelease_${Platform}.lib" Dst="libs\" Required="True"/>
 	</Content>
 
-	<Dependency Package="example_package_name">
+	<Dependency Package="xbase">
 		<Group>com.virtuos.tnt</Group>
 		<Version>[1.0,)</Version>
 		<Type>Package</Type>
@@ -72,7 +72,7 @@
 		</Properties>
 	</ProjectProperties>
 	
-	<Project Name="${Name}" Language="${Language}" Location="source\main\cpp" Scope="Public" DependsOn="example_package_name:example_package_name">
+	<Project Name="${Name}" Language="${Language}" Location="source\main\cpp" Scope="Public" DependsOn="xbase:xbase">
 		<ProjectFile>
 			<Project DefaultTargets="Build" ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
 				<PropertyGroup Label="Globals">
