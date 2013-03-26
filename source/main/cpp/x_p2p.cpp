@@ -1,3 +1,6 @@
+#include "xbase\x_target.h"
+#include "xp2p\x_p2p.h"
+
 namespace xcore
 {
 	namespace xp2p
@@ -97,58 +100,9 @@ namespace xcore
 			};
 		}
 
-		Address const*				gFindAddress(PeerID);
-		void						gUpdatePeer(PeerID, EPeerType, Address const*);
+		NetAddress const*			gFindAddress(PeerID);
+		void						gUpdatePeer(PeerID, NetAddress const*);
 
-		// ----------------- Channels ----------------- 
-		// Channel 0 is the announce channel and is used for a Peer to announce itself once it is connected.
-		// The announcement message contains the details of the remote peer that initiated the connection.
-
-		// Single Producer / Single Consumer
-		class IChannelOUT
-		{
-		public:
-			virtual					~ChannelOUT() {}
-
-			virtual void			Open() = 0;
-			virtual void			Close() = 0;
-			virtual u32				GetId() const = 0;
-
-			// User, Single Thread
-			virtual Message const*	CreateMsg(Address const* to, u32 size) = 0;
-			virtual void			WriteMsg(xbyte* data, u32 size) = 0;
-			virtual void			QueueMsg() = 0;
-
-			// Commands
-			enum ECommand { CONNECT, DISCONNECT };
-			virtual void			QueueCmd(ECommand, Address const*) = 0;
-
-			// Peer, Single Thread
-			virtual void			ReadMsg(Message*& msg) = 0;
-			virtual void			CloseMsg(Message* msg) = 0;
-		};
-		
-		// Multiple Producers / Single Consumer
-		class IChannelIN
-		{
-		public:
-			virtual					~IChannelIN() {}
-
-			virtual void			Open() = 0;
-			virtual void			Close() = 0;
-			virtual u32				GetId() const = 0;
-
-			// Peer, Multiple Producers (The Worker-Threads)
-			virtual Message const*	CreateMsg(Address const*, u32 size) = 0;
-			virtual void			WriteMsg(Message const*, xbyte* data, u32 size) = 0;
-			virtual void			QueueMsg(Message const*) = 0;
-
-			// User, Single Thread
-			virtual void			ReadMsg(Message*& msg) = 0;
-			virtual void			CloseMsg(Message* msg) = 0;
-
-			virtual void			QueueEvent(Message::EEvent, Address const*) = 0;
-		};
 
 
 

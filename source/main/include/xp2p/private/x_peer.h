@@ -17,9 +17,6 @@ namespace xcore
 	// ==============================================================================================================================
 	namespace xp2p
 	{
-		class IPeer;
-		class IChannel;
-
 		enum EMsgInfo
 		{
 			MSG_NONE						= 0, 
@@ -29,23 +26,63 @@ namespace xcore
 			MSG_EVENT_DISCONNECTED			= -200 
 		};
 
-	
-		class IPeer
+		typedef void*				WriteHandle;
+		typedef void*				ReadHandle;
+
+		// P2P - Message Channel (single threaded access)
+		class IChannel
 		{
 		public:
-			enum EConnection { 
+			virtual const char*		Name() const = 0;
 
+			// Send
+			virtual WriteHandle		CreateMsg(PeerID to, u32 size) = 0;
+			virtual void			QueueMsg(WriteHandle hnd) = 0;
 
-		private:
+			// Receive
+			virtual ReadHandle		ReadMsg() = 0;
+			virtual void			CloseMsg(ReadHandle hnd) = 0;
 
+		protected:
+			virtual					~IChannel() {}
 		};
 
-		// P2P - Host
-		// This is the local Peer called Host. Using the Host you can connect to and 
-		// disconnect from remote Peers. Using the created IChannel you can send and 
-		// receive messages.
-		// Note: You will work with remote peers using IPeer*.
-		class Host
+		// 
+		// We can create different kind of channels:
+		// 
+		// 1. A channel where it is allocating directly from the system using malloc() 
+		//    and closing a message will directly call free().
+		//
+		// 2. A channel where it uses a specialized allocator that uses a pre-allocated 
+		//    chunk of memory.
+		//
+		// 3. A channel where it holds a lockless queue with a finite amount of pointers 
+		//    to fixed size chunks (512 bytes or so). Here a message can never use more 
+		//    than 512 bytes, but even a 8 byte message will occupy 512 bytes in memory.
+		//
+		// Blocking IO:
+		//    The channel could block the calling thread when there are no messages.
+		//    The channel could block when the channel has no memory left for inserting
+		//    another message, the calling thread has to wait until messages are being closed
+		//    by the network system sending and closing the messages.
+		// 
+
+		// API for Channel
+		class Channels
+		{
+		public:
+			virtual IChannel*	Create(const char* channel_name) = 0;
+			virtual void		Destroy(IChannel*) = 0;
+
+		private:
+			virtual 			~Channels() {}
+		};
+
+		// P2P - Peer
+		// This is the local Peer. Using the Peer you can connect to and disconnect from
+		// remote Peers. Using the created IChannel you can send and receive messages.
+		// Note: You will work with remote peers through their PeerID.
+		class Peer
 		{
 		public:
 			virtual void		AddChannel(IChannel* channel) = 0;
@@ -53,15 +90,27 @@ namespace xcore
 			virtual void		Start() = 0;
 			virtual void		Stop() = 0;
 
-			virtual void		ConnectTo(IPeer* peer) = 0;
+			virtual PeerID		GetId() const = 0;
+
+			virtual void		ConnectTo(PeerID peerId) = 0;
 			virtual u32			NumConnections() const = 0;
-			virtual void		GetConnections(IPeer** outPeerList, u32 sizePeerList, u32& outPeerCnt) = 0;
-			virtual void		DisconnectFrom(IPeer* peer) = 0;
+			virtual void		GetConnections(PeerID* outPeerList, u32 sizePeerList, u32& outPeerCnt) = 0;
+			virtual void		DisconnectFrom(PeerID peerId) = 0;
+
+		protected:
+			virtual				~Peer() {}
+		};
+
+		// API for Host
+		class Host
+		{
+		public:
+			virtual Peer*		Create() = 0;
+			virtual void		Destroy(Peer*) = 0;
 
 		protected:
 			virtual				~Host() {}
 		};
-
 
 		/**
 		\brief Example on how to create a Peer
@@ -140,25 +189,24 @@ namespace xcore
 			void				Start(NetPort host_port, x_iallocator* mem_allocator);
 			void				Stop();
 
-			IPeer*				RegisterPeer(const char* p2p_endpoint_str);
-			void				UnregisterPeer(IPeer*);
+			NetAddress			RegisterAddress(const char* address_str);
+			void				RegisterPeer(PeerID, NetAddress);
+			void				UnregisterPeer(PeerID);
+
+			NetAddress			FindAddressOfPeer(PeerID) const;
+			PeerID				FindPeerByAddress(NetAddress) const;
 
 			// Host
-			IPeer*				GetHost() const;
+			PeerID				GetId() const;
 
-			void				ConnectTo(IPeer* peer);
-			void				DisconnectFrom(IPeer* peer);
+			void				ConnectTo(PeerID peerId);
+			void				DisconnectFrom(PeerID peerId);
 			u32					NumConnections() const;
-			void				GetConnections(IPeer** outPeerList, u32 sizePeerList, u32& outPeerCnt);
+			void				GetConnections(PeerID* outPeerList, u32 sizePeerList, u32& outPeerCnt);
 
 			// Channels
-			// Send
-			MsgHandle			AllocMsg(const char* channel_name, IPeer* to, u32 size);
-			void				SendMsg(MsgHandle msg);
-
-			// Receive
-			MsgHandle			ReceiveMsg(const char* channel_name);
-			void				FreeMsg(MsgHandle msg);
+			IChannel*			Create(const char* channel_name);
+			void				Destroy(IChannel*);
 
 		protected:
 			class Implementation;
