@@ -1,14 +1,15 @@
 //==============================================================================
-//  x_peer.h
+//  x_host.h
 //==============================================================================
-#ifndef __XPEER_2_PEER_PEER_H__
-#define __XPEER_2_PEER_PEER_H__
+#ifndef __XPEER_2_PEER_HOST_H__
+#define __XPEER_2_PEER_HOST_H__
 #include "xbase\x_target.h"
 #ifdef USE_PRAGMA_ONCE 
 #pragma once 
 #endif
 
 #include "xp2p\x_types.h"
+
 
 namespace xcore
 {
@@ -17,18 +18,20 @@ namespace xcore
 	// ==============================================================================================================================
 	namespace xp2p
 	{
-		// P2P - Remote Peer
-		class IPeer
-		{
-		public:	
+		class IPeer;
 
-			virtual PeerID		GetID() const = 0;
+		// API for Host
+		class IHost 
+		{
+		public:
+			virtual PeerID		GetId() const = 0;
 
 		protected:
-			virtual				~IPeer() {}
+			virtual				~IHost() {}
 		};
+
 
 	}
 }
 
-#endif	///< __XPEER_2_PEER_PEER_H__
+#endif	///< __XPEER_2_PEER_HOST_H__

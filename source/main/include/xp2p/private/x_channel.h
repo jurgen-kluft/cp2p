@@ -26,17 +26,17 @@ namespace xcore
 		extern Channels*			gCreateChannels(u32 max_num_channels, x_iallocator* allocator);
 
 		//
-		class IDelegate
+		class IEventHandler
 		{
 		public:
-			virtual void			Handle() = 0;
+			virtual void			OnEvent() = 0;
 		};
 
 		// API for Channels
 		class Channels
 		{
 		public:
-			virtual IChannel*		Create(const char* inChannelName, IDelegate* inOnReceiveDelegate) = 0;
+			virtual IChannel*		Create(const char* inChannelName, IEventHandler* inOnReceiveHandler) = 0;
 			virtual void			Destroy(IChannel*) = 0;
 
 		private:

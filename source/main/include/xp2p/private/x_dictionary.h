@@ -13,29 +13,30 @@
 namespace xcore
 {
 	// Forward declarations
-	class x_iallocator;
+	class MemoryAllocator;
 
 	namespace xp2p
 	{
 		class Dictionary;
-		extern Dictionary*			gCreateDictionary(NetPort port, x_iallocator* allocator);
+		extern Dictionary*			gCreateDictionary(MemoryAllocator* allocator);
+
 
 		// "Peer ID - Address" Dictionary
 		class Dictionary
 		{
 		public:
-			virtual PeerID			RegisterHost(NetPort port) = 0;
 			virtual NetAddress		RegisterAddress(const char* address_str) = 0;
-			virtual void			RegisterPeer(PeerID, NetAddress) = 0;
+			virtual void			RegisterPeerID(PeerID, NetAddress) = 0;
 
-			virtual NetAddress		FindAddressOfPeer(PeerID) const = 0;
-			virtual PeerID			FindPeerByAddress(NetAddress) const = 0;
+			virtual NetAddress		FindAddressByPeerID(PeerID) const = 0;
+			virtual PeerID			FindPeerIDByAddress(NetAddress) const = 0;
 
-			virtual void			UnregisterPeer(PeerID) = 0;	
+			virtual void			UnregisterPeer(PeerID) = 0;			// Will also unregister the address
 
 		protected:
 			virtual					~Dictionary() {}
-		};
+		};		
+
 	}
 }
 

@@ -9,6 +9,7 @@
 #endif
 
 #include "xp2p\x_types.h"
+#include "xp2p\x_msg.h"
 
 namespace xcore
 {
@@ -17,49 +18,10 @@ namespace xcore
 	// ==============================================================================================================================
 	namespace xp2p
 	{
-		class IPeer;
-		class IChannel;
-
-		enum EMsgInfo
-		{
-			MSG_NONE						= 0, 
-			MSG_DATA_RECEIVED				= 1,
-			MSG_EVENT_CONNECTED				= 100, 
-			MSG_EVENT_CONNECTION_FAILED		= -100, 
-			MSG_EVENT_DISCONNECTED			= -200 
-		};
-
-	
-		class IPeer
+		class Peer
 		{
 		public:
-			enum EConnection { 
 
-
-		private:
-
-		};
-
-		// P2P - Host
-		// This is the local Peer called Host. Using the Host you can connect to and 
-		// disconnect from remote Peers. Using the created IChannel you can send and 
-		// receive messages.
-		// Note: You will work with remote peers using IPeer*.
-		class Host
-		{
-		public:
-			virtual void		AddChannel(IChannel* channel) = 0;
-			
-			virtual void		Start() = 0;
-			virtual void		Stop() = 0;
-
-			virtual void		ConnectTo(IPeer* peer) = 0;
-			virtual u32			NumConnections() const = 0;
-			virtual void		GetConnections(IPeer** outPeerList, u32 sizePeerList, u32& outPeerCnt) = 0;
-			virtual void		DisconnectFrom(IPeer* peer) = 0;
-
-		protected:
-			virtual				~Host() {}
 		};
 
 
@@ -67,26 +29,37 @@ namespace xcore
 		\brief Example on how to create a Peer
 
 		\code
+		class MyMemoryAllocator : public MemoryAllocator
+		{
+			...
+		};
+
 		int main(void)
 		{
-			PeerID const hostID = gRegisterHost(5599);
+			// In a real Application you need to allocate this and not like we do here 
+			// putting it on the stack.
+			MyMemoryAllocator allocator;
 
-			xp2p::Address const* tracker_address = gCreateAddress("10.0.6.2:5599");
-			PeerID const trackerID = 0;	// ID 0 is reserved by the Tracker 
-			gRegisterPeer(trackerID, tracker_address);
+			P2P* p2p = new P2P();
+			p2p->Start(5195, &allocator);
+
+			IPeer* tracker = p2p->RegisterPeer("10.0.6.2:5599");
+			p2p->ConnectTo(tracker);
 
 			// Other symphony peers will also register their channel under this name.
-			// This ensures that all messages send over this channel will only endup
+			// This ensures that all messages send over this channel will only end up
 			// in this channel and not in any other channels that might be added.
-			xp2p::Peer* peer = gCreateHost(hostID);
-			xp2p::IChannel* symphony_channel = gCreateChannel("Symphony");
-			peer->AddChannel(symphony_channel);
-			peer->ConnectTo(trackerID);
-			// Peer is now running in the background
-			// Tell the Peer to stop
-			peer->Stop();
-			// Destroy the Peer nicely and do a correct clean-up
-			gDestroyHost(peer);
+			const char* symphony_channel = "Symphony";
+
+			// Peer is now running in the background, getting connected to the tracker.
+
+			// Tell the Peer to stop. This will release all resources, it is also
+			// blocking the thread we are on.
+			p2p->Stop();
+
+			// Destroy the P2P network 
+			delete peer;
+
 			return 0;
 		}
 
@@ -100,65 +73,76 @@ namespace xcore
 		// first message would very likely not be the one from our remote peer.
 		// This assumes that you already have received information of the other peer
 		// and have registered it with:
-		//     xp2p::Address const* other_symphony_peer_address = gCreateAddress("10.0.6.3:5599");
-		//     gRegisterPeer(other_symphony_peerID, other_symphony_peer_address).
+		//     PeerID other_symphony_peer_id = ...;
+		//     IPeer* other_symphony_peer = p2p->RegisterPeer(other_symphony_peer_id, "10.0.6.3:5599");
 		// 
 
-		PeerID other_symphony_peerID = ...;
-		peer->ConnectTo(other_symphony_peerID);
+		p2p->ConnectTo(other_symphony_peer);
 
-		xp2p::ReadHandle received_msg;
-		received_msg = symphony_channel->ReadMsg();		// This will block until a message has been received
+		const char* symphony_channel = "Symphony";
+
+		xp2p::RxMessage* received_msg;
+		received_msg = p2p->ReadMsg(symphony_channel);		// This will block until a message has been received
 
 		// Do something with the message
 		... 
-		if (received_msg->mPeerID == other_symphony_peerID)
+		if (received_msg->FromPeerID() == other_symphony_peer->GetID())
 		{
-			if (received_msg->mType==xp2p::Message::EVENT && received_msg->mEvent==xp2p::Message::CONNECTED)
+			if (received_msg->IsType(xp2p::Message::EVENT) && received_msg->IsEvent(xp2p::Message::CONNECTED))
 			{
 				// Send a simple message containing a piece of text
-				// Reserve enough space when creating the message
-				xp2p::Message const* msg_to_send = symphony_channel->CreateMsg(other_symphony_peerID, 16);
 				const char* msg_text = "Hello peer!";
+				// Make sure to reserve enough space when creating the message
+				s32 msg_len = x_strlen(msg_text) + 1;
+				xp2p::TxMessage* msg_to_send = p2p->WriteMsg(symphony_channel, other_symphony_peer, msg_len);
+				
 				// Write the text into the message data
-				symphony_channel->WriteMsg(msg_text, x_strlen(msg_text));
+				msg_to_send->Write(msg_text);
+
 				// Queue up the message for sending
-				symphony_channel->QueueMsg();
+				p2p->SendMsg(msg_to_send);
 			}
 		}
 
-		symphony_channel->CloseMsg(received_msg);
+		p2p->CloseMsg(received_msg);
 
 		\endcode
 		**/
+
+		class MemoryAllocator
+		{
+		public:
+			virtual void*		Allocate(u32 numberOfBytes, u32 alignment) = 0;
+			virtual void		Deallocate(void*) = 0;
+		};
 
 		class P2P
 		{
 		public:
 								P2P();
 
-			void				Start(NetPort host_port, x_iallocator* mem_allocator);
+			void				Start(NetPort host_port, MemoryAllocator* memory_allocator);
 			void				Stop();
 
-			IPeer*				RegisterPeer(const char* p2p_endpoint_str);
-			void				UnregisterPeer(IPeer*);
+			Peer*				RegisterPeer(const char* p2p_endpoint_str);
+			void				UnregisterPeer(Peer*);
 
 			// Host
-			IPeer*				GetHost() const;
+			Peer*				GetHost() const;
 
-			void				ConnectTo(IPeer* peer);
-			void				DisconnectFrom(IPeer* peer);
+			void				ConnectTo(Peer* peer);
+			void				DisconnectFrom(Peer* peer);
 			u32					NumConnections() const;
-			void				GetConnections(IPeer** outPeerList, u32 sizePeerList, u32& outPeerCnt);
+			void				GetConnections(Peer** outPeerList, u32 sizePeerList, u32& outPeerCnt);
 
 			// Channels
 			// Send
-			MsgHandle			AllocMsg(const char* channel_name, IPeer* to, u32 size);
-			void				SendMsg(MsgHandle msg);
+			TxMessage*			WriteMsg(const char* channel_name, Peer* to, u32 size);
+			void				SendMsg(TxMessage*);
 
 			// Receive
-			MsgHandle			ReceiveMsg(const char* channel_name);
-			void				FreeMsg(MsgHandle msg);
+			RxMessage*			ReadMsg(const char* channel_name);
+			void				CloseMsg(RxMessage*);
 
 		protected:
 			class Implementation;

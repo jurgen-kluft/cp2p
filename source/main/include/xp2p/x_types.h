@@ -16,6 +16,10 @@ namespace xcore
 	namespace xp2p
 	{
 		typedef u16					NetPort;
+		typedef void*				NetAddress;
+
+		typedef u32					PeerID;
+
 		typedef void*				MsgHandle;
 	}
 }
