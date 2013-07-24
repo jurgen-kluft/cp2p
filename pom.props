@@ -1,0 +1,9 @@
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+  	<PackageLanguage>C++</PackageLanguage>
+    <PackageDir>$(MSBuildProjectDirectory)</PackageDir>
+    <PackagePlatform>Win32</PackagePlatform>
+    <PackageSolution>xp2p.sln</PackageSolution>
+    <PackageProjectGroup>Main</PackageProjectGroup>
+  </PropertyGroup>
+</Project>
