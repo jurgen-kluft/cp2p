@@ -13,17 +13,15 @@
 namespace xcore
 {
 	// Forward declarations
-	class x_iallocator;
 
 	namespace xp2p
 	{
 		class IPeer;
-
-		typedef void*				WriteHandle;
-		typedef void*				ReadHandle;
+		class IMessage;
+		class IAllocator;
 
 		class Channels;
-		extern Channels*			gCreateChannels(u32 max_num_channels, x_iallocator* allocator);
+		extern Channels*			gCreateChannels(u32 inMaxNumChannels, IAllocator* allocator);
 
 		//
 		class IDelegate
@@ -50,12 +48,12 @@ namespace xcore
 			virtual const char*		Name() const = 0;
 
 			// Send
-			virtual WriteHandle		CreateMsg(IPeer* to, u32 size) = 0;
-			virtual void			QueueMsg(WriteHandle hnd) = 0;
+			virtual IMessage*		CreateMsg(IPeer* to, u32 inMaxSize) = 0;
+			virtual void			QueueMsg(IMessage*) = 0;
 
 			// Receive
-			virtual ReadHandle		ReadMsg() = 0;
-			virtual void			CloseMsg(ReadHandle hnd) = 0;
+			virtual IMessage*		ReadMsg() = 0;
+			virtual void			CloseMsg(IMessage*) = 0;
 
 		protected:
 			virtual					~IChannel() {}
