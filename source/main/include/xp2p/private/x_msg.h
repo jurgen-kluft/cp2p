@@ -15,7 +15,7 @@ namespace xcore
 	namespace xp2p
 	{
 		// P2P - Message (private)
-		// This represents a handle to a to-sent and received message.
+		// This represents a handle to a to-sent or received message.
 		class Message
 		{
 		public:
