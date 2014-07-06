@@ -10,6 +10,7 @@
 
 #include "xp2p\x_types.h"
 #include "xp2p\x_msg.h"
+#include "xp2p\x_peer.h"
 
 namespace xcore
 {
@@ -124,20 +125,20 @@ namespace xcore
 			void				Start(NetPort host_port, MemoryAllocator* memory_allocator);
 			void				Stop();
 
-			Peer*				RegisterPeer(const char* p2p_endpoint_str);
-			void				UnregisterPeer(Peer*);
+			IPeer*				RegisterPeer(const char* p2p_endpoint_str);
+			void				UnregisterPeer(IPeer*);
 
 			// Host
-			Peer*				GetHost() const;
+			IPeer*				GetHost() const;
 
-			void				ConnectTo(Peer* peer);
-			void				DisconnectFrom(Peer* peer);
+			void				ConnectTo(IPeer* peer);
+			void				DisconnectFrom(IPeer* peer);
 			u32					NumConnections() const;
-			void				GetConnections(Peer** outPeerList, u32 sizePeerList, u32& outPeerCnt);
+			void				GetConnections(IPeer** outPeerList, u32 sizePeerList, u32& outPeerCnt);
 
 			// Channels
 			// Send
-			TxMessage*			WriteMsg(const char* channel_name, Peer* to, u32 size);
+			TxMessage*			WriteMsg(const char* channel_name, IPeer* to, u32 size);
 			void				SendMsg(TxMessage*);
 
 			// Receive
