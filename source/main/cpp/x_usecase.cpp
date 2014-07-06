@@ -1,12 +1,12 @@
 #include "xbase\x_target.h"
 #include "xbase\x_allocator.h"
-#include "xbase\x_string_std.h"
+#include "xbase\x_va_list.h"
+#include "xbase\x_string_ascii.h"
 
 #include "xp2p\x_p2p.h"
 #include "xp2p\x_peer.h"
 #include "xp2p\x_msg.h"
 #include "xp2p\private\x_allocator.h"
-#include "xp2p\private\x_channel.h"
 
 namespace xcore
 {
@@ -17,28 +17,15 @@ namespace xcore
 			return NULL;
 		}
 
-		static void gEndPointToStr(NetIP4 ip, NetPort port, char* outString, u32 inStringMaxLen)
+		static void gEndPointToStr(NetIP4 ip, char* outString, u32 inStringMaxLen)
 		{
 		}
 
-		class PublicChannelListener : public IDelegate
-		{
-		public:
-			virtual void	Handle()
-			{
-				// Signal the wait object
-			}
-
-			void			WaitForMsgReceived()
-			{
-				// Wait for the object to be signaled
-			}
-		};
 
 		class MyAllocator : public IAllocator
 		{
 		public:
-								MyAllocator(x_iallocator* inSystemAllocator) : mSystemAllocator(inAllocator) {}
+								MyAllocator(x_iallocator* inSystemAllocator) : mSystemAllocator(inSystemAllocator) {}
 
 			virtual void*		Alloc(u32 inSize, u32 inAlignment)
 			{
@@ -62,7 +49,7 @@ namespace xcore
 			static void			sRelease(MyAllocator*& allocator)
 			{
 				// Should we call the destructor of our allocator?
-				mSystemAllocator->deallocate(mOurAllocator);
+				allocator->mSystemAllocator->deallocate(allocator->mOurAllocator);
 				allocator = NULL;
 			}
 
@@ -76,63 +63,63 @@ namespace xcore
 		static void ExampleUseCase(x_iallocator* inSystemAllocator)
 		{
 			MyAllocator* ourSystemAllocator = MyAllocator::sCreate(inSystemAllocator, 2 * 1024 * 1024);
-			xp2p::System system;
-			xp2p::System* node = &system;
-			IPeer* host = node->Start(5008, ourSystemAllocator);
-
-			MyAllocator* publicChannelAllocator = MyAllocator::sCreate(inSystemAllocator, 1 * 1024 * 1024);
-
-			// Register the channel
-			// We have implemented a listener which provides functionality to wait (blocking thread) for
-			// incoming messages.
-			PublicChannelListener publicChannelListener;
-			IChannel* publicChannel = node->RegisterChannel("public", publicChannelAllocator, &publicChannelListener);
+			
+			xp2p::P2P system(ourSystemAllocator);
+			xp2p::P2P* node = &system;
+			IPeer* host = node->Start(NetIP4().Port(5008));
 
 			// Let's connect to a peer
-			IPeer* remotePeer = node->ConnectTo("10.0.0.24:5008");
+			IPeer* remotePeer = node->RegisterPeer(PeerID(1234), NetIP4(10, 0, 0, 24).Port(5008));
+			node->ConnectTo(remotePeer);
+
 			while (remotePeer != NULL)
 			{
-				publicChannelListener.WaitForMsgReceived();
+				IncomingMessage rmsg;
+				if (node->ReceiveMsg(rmsg, 1000))	// Wait 1000 ms
+				{
+					if (rmsg.IsFrom(remotePeer))
+					{
+						if (rmsg.Type().IsEvent())
+						{
+							if (rmsg.Event().IsConnected())
+							{
+								OutgoingMessage tmsg;
+								node->CreateMsg(tmsg, remotePeer, 40);
+								tmsg.Write("Hello remote peer, how are you?");
+								node->SendMsg(tmsg);
+							}
+							else if (rmsg.Event().IsDisconnected())
+							{
+								// Remote peer has disconnected
+								remotePeer = NULL;
+								break;
+							}
+						}
+						else if (rmsg.Type().HasData())
+						{
+							char ip4_str[32];
+							remotePeer->GetIP4().ToString(ip4_str, sizeof(ip4_str));
 
-				ReceiveMessage rmsg(node, publicChannel);
-				if (rmsg.FromPeer() == remotePeer)
-				{
-					if (rmsg.IsEvent()) 
-					{
-						if (rmsg.GetEvent()==ReceiveMessage::EVENT_CONNECTED)
-						{
-							SendMessage tmsg(node, publicChannel, remotePeer);
-							tmsg.WriteStr("Hello remote peer, how are you?");
-						}
-						else if (rmsg.GetEvent()==ReceiveMessage::EVENT_DISCONNECTED)
-						{
-							// Remote peer has disconnected
-							remotePeer = NULL;
-							break;
+							char msgString[256];
+							u32 msgStringLen;
+							rmsg.ReadStr(msgString, sizeof(msgString), msgStringLen);
+							x_printf("Message \"%s\"received from Peer \"%s\"", x_va_list(x_va((const char*)msgString), x_va(ip4_str)));
 						}
 					}
-					else if (rmsg.HasData())
+					else
 					{
-						char msgString[256];
-						rmsg.ReadStr(msgString, sizeof(msgString));
-						x_printf("Message \"%s\"received from Peer \"%s\"", x_va_list(x_va(msgString), x_va(remotePeer->GetStr())));
+						//break;
 					}
-				}
-				else
-				{
-					break;
 				}
 			}
 
 			// Clear all pointers
-			publicChannel = NULL;
 			remotePeer = NULL;
 
 			// Stop all threads, close all sockets, release all resources
 			node->Stop();
 
 			// Release our allocators and their memory back to the system allocator
-			MyAllocator::sRelease(publicChannelAllocator);
 			MyAllocator::sRelease(ourSystemAllocator);
 		}
 	}

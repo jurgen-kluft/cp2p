@@ -15,26 +15,39 @@ namespace xcore
 	// ==============================================================================================================================
 	namespace xp2p
 	{
-		class Message
-		{
-		public:
-			enum EType
-			{
-				DATA  = 1,
-				EVENT = 2,
-			};
+		class IPeer;
 
-			enum EEvent
-			{
-				CONNECTED				= 100, 
-				CONNECTION_FAILED		= -100, 
-				DISCONNECTED			= -200 
-			};
+		struct MessageType
+		{
+			inline			MessageType(bool _is_event) : is_event_(_is_event) {}
+
+			inline bool		IsEvent() const						{ return is_event_; }
+			inline bool		HasData() const						{ return !is_event_; }
+
+		private:
+			bool			is_event_;
 		};
 
-		class TxMessage
+		struct MessageEvent
+		{
+			inline			MessageEvent(bool _is_connected, bool _cannot_connect) : is_connected_(_is_connected), cannot_connect_(_cannot_connect) {}
+
+			inline bool		IsConnected() const					{ return is_connected_; }
+			inline bool		IsDisconnected() const				{ return !is_connected_; }
+
+			inline bool		CannotConnect() const				{ return cannot_connect_; }
+
+		private:
+			bool			is_connected_;
+			bool			cannot_connect_;
+		};
+
+		class OutgoingMessage
 		{
 		public:
+			inline		 OutgoingMessage() : mData(0), mWrittenSize(0), mMaximumSize(0) {}
+			inline		~OutgoingMessage() {}
+
 			u32			CurrentSize() const;
 			u32			MaximumSize() const;
 			bool		CanWrite(u32 numberOfBytes) const;		// Check if we still can write N number of bytes
@@ -53,22 +66,24 @@ namespace xcore
 			void		Write(const char*);
 
 		protected:
-			inline		TxMessage() : mData(0), mWrittenSize(0), mMaximumSize(0) {}
-			inline		TxMessage(const TxMessage&) : mData(0), mWrittenSize(0), mMaximumSize(0) {}
-			inline		~TxMessage() {}
+			inline		 OutgoingMessage(const OutgoingMessage&) : mData(0), mWrittenSize(0), mMaximumSize(0) {}
 
 			void*		mData;
 			u32			mWrittenSize;
 			u32			mMaximumSize;
 		};
 
-		class RxMessage
+		class IncomingMessage
 		{
 		public:
-			bool		IsType(Message::EType) const;
-			bool		IsEvent(Message::EEvent) const;
+			inline		 IncomingMessage() : mData(0), mReadSize(0), mTotalSize(0) {}
+			inline		~IncomingMessage() {}
 
-			PeerID		FromPeerID() const;
+			MessageType	Type() const;
+			MessageEvent Event() const;
+
+			bool		IsFrom(IPeer*) const;
+			PeerID		From() const;
 
 			u32			ReadSize() const;
 			u32			TotalSize() const;
@@ -89,9 +104,7 @@ namespace xcore
 			bool		ReadStr(const char* str, u32 maxstrlen, u32& strlen);
 
 		protected:
-			inline		RxMessage() : mData(0), mReadSize(0), mTotalSize(0) {}
-			inline		RxMessage(const RxMessage&) : mData(0), mReadSize(0), mTotalSize(0) {}
-			inline		~RxMessage() {}
+			inline		 IncomingMessage(const IncomingMessage&) : mData(0), mReadSize(0), mTotalSize(0) {}
 
 			void*		mData;
 			u32			mReadSize;

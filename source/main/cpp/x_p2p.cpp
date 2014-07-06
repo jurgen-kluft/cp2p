@@ -2,66 +2,53 @@
 #include "xbase\x_allocator.h"
 #include "xp2p\x_p2p.h"
 #include "xp2p\x_msg.h"
-#include "xp2p\private\x_channel.h"
 
 namespace xcore
 {
 	namespace xp2p
 	{
-		class System::Implementation
+		class P2P::Implementation
 		{
 		public:
 		};
 
 
-		System::System() : mImplementation(NULL)
+		P2P::P2P(IAllocator* inSystemAllocator) : mAllocator(inSystemAllocator), mImplementation(NULL)
 		{
 		}
 
-		IPeer*				System::Start(NetPort inHostPort, IAllocator* inSystemAllocator)
+		IPeer*				P2P::Start(NetIP4 inHostPort)
 		{
 			return 0;
 		}
 
-		void				System::Stop()
+		void				P2P::Stop()
 		{
 		}
 
 		// Peers
-		IPeer*				System::ConnectTo(const char* inEndpoint)
-		{
-			return 0;
-		}
-
-		void				System::DisconnectFrom(IPeer*)
-		{
-		}
-
-		// Channels
-		IChannel*			System::RegisterChannel(const char* inChannelName, IAllocator* inMsgAllocator, IDelegate* inChannelReceiveListener)
-		{
-			return 0;
-		}
-
-		// Messages
-		IMessage*			System::CreateMessage(IChannel* inChannel, IPeer* inTo, u32 inMaxMsgSizeInBytes)
-		{
-			return 0;
-		}
-
-		void				System::SendMessage(IMessage* inMsg)
-		{
-		}
-
-		IMessage*			System::ReceiveMessage(IChannel* inChannel)
-		{
-			return 0;
-		}
-
-		void				System::DestroyMessage(IMessage* inMsg)
+		void				P2P::ConnectTo(IPeer* _peer)
 		{
 			
 		}
 
+		void				P2P::DisconnectFrom(IPeer*)
+		{
+		}
+
+		// Messages
+		bool				P2P::CreateMsg(OutgoingMessage& _msg, IPeer* _to, u32 _size)
+		{
+			return 0;
+		}
+
+		void				P2P::SendMsg(OutgoingMessage& _msg)
+		{
+		}
+
+		bool				P2P::ReceiveMsg(IncomingMessage& _msg, u32 _wait_in_ms)
+		{
+			return false;
+		}
 	}
 }

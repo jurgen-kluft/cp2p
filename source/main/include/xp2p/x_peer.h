@@ -18,7 +18,7 @@ namespace xcore
 	namespace xp2p
 	{
 		// P2P - Peer
-		// This is represents a peer in the network.
+		// This represents a peer in the network.
 		class IPeer
 		{
 		public:
@@ -27,8 +27,7 @@ namespace xcore
 			virtual bool		IsRemote() const = 0;
 			virtual EStatus		GetStatus() const = 0;
 			virtual NetIP4		GetIP4() const = 0;
-			virtual NetPort		GetPort() const = 0;
-			virtual const char*	GetStr() const = 0;
+			virtual PeerID		GetID() const = 0;
 
 		private:
 			virtual				~IPeer() {}
