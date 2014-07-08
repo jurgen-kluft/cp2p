@@ -44,11 +44,11 @@ written by
 
 #include <map>
 #include <vector>
-#include "udt.h"
-#include "packet.h"
-#include "queue.h"
-#include "cache.h"
-#include "epoll.h"
+#include "udt\udt.h"
+#include "udt\packet.h"
+#include "udt\queue.h"
+#include "udt\cache.h"
+#include "udt\epoll.h"
 
 class CUDT;
 

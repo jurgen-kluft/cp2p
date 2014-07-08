@@ -38,7 +38,7 @@ written by
    Yunhong Gu, last updated 01/22/2011
 *****************************************************************************/
 
-#include "list.h"
+#include "udt\list.h"
 
 CSndLossList::CSndLossList(int size):
 m_piData1(NULL),

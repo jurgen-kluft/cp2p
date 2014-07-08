@@ -42,8 +42,8 @@ written by
 #define __UDT_LIST_H__
 
 
-#include "udt.h"
-#include "common.h"
+#include "udt\udt.h"
+#include "udt\common.h"
 
 
 class CSndLossList

@@ -42,8 +42,8 @@ written by
 #define __UDT_CHANNEL_H__
 
 
-#include "udt.h"
-#include "packet.h"
+#include "udt\udt.h"
+#include "udt\packet.h"
 
 
 class CChannel

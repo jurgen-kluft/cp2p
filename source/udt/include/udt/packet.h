@@ -42,7 +42,7 @@ written by
 #define __UDT_PACKET_H__
 
 
-#include "udt.h"
+#include "udt\udt.h"
 
 #ifdef WIN32
    struct iovec

@@ -42,9 +42,9 @@ written by
 #define __UDT_BUFFER_H__
 
 
-#include "udt.h"
-#include "list.h"
-#include "queue.h"
+#include "udt\udt.h"
+#include "udt\list.h"
+#include "udt\queue.h"
 #include <fstream>
 
 class CSndBuffer

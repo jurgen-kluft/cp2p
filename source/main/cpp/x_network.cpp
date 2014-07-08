@@ -5,68 +5,20 @@ namespace xcore
 {
 	namespace xp2p
 	{
-		// Network:
-		//
-		// Multi-Threaded
-		// Event based
-		// Manages 'connections' by ID
-		// Uses IOCP on Windows
-		// 
-		// 
-		// 
-		// 
+		/// IO Write Thread
+		/// - For all UDT sockets that require writing:
+		///   - schedule them for epoll
+		///   - add the signal socket (which can wake up this thread when new sockets require writing)
 
-		class NetServer
-		{
-		public:
-			void			Start(u16 port);
-			void			Stop();
-
-		protected:
-			static void		sAcceptThreadFunc(void* obj);
-			void			AcceptThreadFunc();
-
-			HANDLE			mThreadHandle;
-			TcpSocket		mServer;
-			bool			mQuit;
-		};
-
-		class NetClient
-		{
-		public:
-
-		protected:
-			u32				mID;
-			bool			mOutgoing;
-			bool			mIncoming;
-			TcpSocket		mSocket;
-
-			enum EState
-			{
-				CONNECTING,
-				HANDSHAKE,
-				CONNECTED,
-				DISCONNECTING,
-				DISCONNECTED,
-			};
-			EState			mState;
-		};
+		/// IO Read and Accept Thread
+		/// Reading messages is using the read-message-memory-allocator
+		/// - For all UDT sockets that require reading:
+		///   - schedule them for epoll
+		///   - add the listen socket
+		///   - add the signal socket (which can wake up this thread when new sockets require reading)
 
 
-		class NetHost
-		{
-		public:
-
-		protected:
-			NetServer		mServer;
-
-			static void		sIOThreadFunc(void* obj);
-			void			IOThreadFunc();
-
-			u32				mNumActiveClients;
-			NetClient*		mActiveClients[62];
-			u32				mNumFreeClients;
-			NetClient*		mFreeClients[62];
-		};
+		/// Note: Ownership of messages (data) to the one using xp2p would be preferred:
+		/// Receiving messages on the
 	}
 }

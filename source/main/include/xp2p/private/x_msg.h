@@ -14,6 +14,8 @@ namespace xcore
 {
 	namespace xp2p
 	{
+		class IAllocator;
+
 		// P2P - Message (private)
 		// This represents a handle to a to-sent or received message.
 		class Message
@@ -25,6 +27,37 @@ namespace xcore
 		private:
 			virtual				~Message() {}
 		};
+
+		struct message_alloc
+		{
+			IAllocator*		allocator_;
+			u32				length_;
+			u32				magic_;
+		};
+
+		struct message_system
+		{
+			u32				flags_;
+			PeerID			to_;
+		};
+
+		struct message_payload
+		{
+			u32				length_;
+			PeerID			from_;
+			//void*			body;
+		};
+
+		struct message_chunk
+		{
+			message_alloc			allocator;
+			message_system			system;		
+			message_payload			payload;		// <--- IncommingMessage is received here
+			//void*					payload;
+		};
+
+		bool		AllocateConnectEventMessage(PeerID peer);
+		bool		AllocateDisconnectEventMessage(PeerID peer);
 
 	}
 }

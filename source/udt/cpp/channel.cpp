@@ -53,8 +53,8 @@ written by
       #include <wspiapi.h>
    #endif
 #endif
-#include "channel.h"
-#include "packet.h"
+#include "udt\channel.h"
+#include "udt\packet.h"
 
 #ifdef WIN32
    #define socklen_t int

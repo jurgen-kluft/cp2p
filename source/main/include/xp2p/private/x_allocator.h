@@ -18,7 +18,6 @@ namespace xcore
 		{
 		public:
 			virtual void*	Alloc(u32 inSize, u32 inAlignment) = 0;
-			virtual void*	Realloc(void* inOldMem, u32 inNewSize, u32 inNewAlignment) = 0;
 			virtual void	Dealloc(void* inOldMem) = 0;
 		};
 	}
