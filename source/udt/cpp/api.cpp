@@ -48,8 +48,8 @@ written by
    #include <unistd.h>
 #endif
 #include <cstring>
-#include "api.h"
-#include "core.h"
+#include "udt\api.h"
+#include "udt\core.h"
 
 using namespace std;
 

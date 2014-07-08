@@ -50,7 +50,7 @@ written by
    #include <windows.h>
 #endif
 #include <cstdlib>
-#include "udt.h"
+#include "udt\udt.h"
 
 
 #ifdef WIN32

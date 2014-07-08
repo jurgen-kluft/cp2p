@@ -44,8 +44,8 @@ written by
 #include <list>
 #include <vector>
 
-#include "common.h"
-#include "udt.h"
+#include "udt\common.h"
+#include "udt\udt.h"
 
 class CCacheItem
 {

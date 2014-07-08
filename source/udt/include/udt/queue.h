@@ -42,9 +42,9 @@ written by
 #ifndef __UDT_QUEUE_H__
 #define __UDT_QUEUE_H__
 
-#include "channel.h"
-#include "common.h"
-#include "packet.h"
+#include "udt\channel.h"
+#include "udt\common.h"
+#include "udt\packet.h"
 #include <list>
 #include <map>
 #include <queue>

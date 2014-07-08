@@ -46,7 +46,7 @@ written by
    #include <sys/time.h>
    #include <time.h>
 #endif
-#include "udt.h"
+#include "udt\udt.h"
 
 
 class CACKWindow

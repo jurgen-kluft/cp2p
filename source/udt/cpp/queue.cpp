@@ -47,9 +47,9 @@ written by
 #endif
 #include <cstring>
 
-#include "common.h"
-#include "core.h"
-#include "queue.h"
+#include "udt\common.h"
+#include "udt\core.h"
+#include "udt\queue.h"
 
 using namespace std;
 

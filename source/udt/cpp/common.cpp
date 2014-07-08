@@ -55,8 +55,8 @@ written by
 #endif
 
 #include <cmath>
-#include "md5.h"
-#include "common.h"
+#include "udt\md5.h"
+#include "udt\common.h"
 
 bool CTimer::m_bUseMicroSecond = false;
 uint64_t CTimer::s_ullCPUFrequency = CTimer::readCPUFrequency();
@@ -760,6 +760,6 @@ void CMD5::compute(const char* input, unsigned char result[16])
    md5_state_t state;
 
    md5_init(&state);
-   md5_append(&state, (const md5_byte_t *)input, strlen(input));
+   md5_append(&state, (const md5_byte_t *)input, (int)strlen(input));
    md5_finish(&state, result);
 }

@@ -45,7 +45,7 @@ namespace xcore
 		class OutgoingMessage
 		{
 		public:
-			inline		 OutgoingMessage() : mData(0), mWrittenSize(0), mMaximumSize(0) {}
+			inline		 OutgoingMessage() : mData(0), mCursor(0) {}
 			inline		~OutgoingMessage() {}
 
 			u32			CurrentSize() const;
@@ -65,18 +65,19 @@ namespace xcore
 			void		Write(f64);
 			void		Write(const char*);
 
-		protected:
-			inline		 OutgoingMessage(const OutgoingMessage&) : mData(0), mWrittenSize(0), mMaximumSize(0) {}
+			void		Release();
 
+		protected:
+			inline		 OutgoingMessage(const OutgoingMessage&) : mData(0), mCursor(0) {}
+			
 			void*		mData;
-			u32			mWrittenSize;
-			u32			mMaximumSize;
+			u32			mCursor;
 		};
 
 		class IncomingMessage
 		{
 		public:
-			inline		 IncomingMessage() : mData(0), mReadSize(0), mTotalSize(0) {}
+			inline		 IncomingMessage() : mData(0), mCursor(0) {}
 			inline		~IncomingMessage() {}
 
 			MessageType	Type() const;
@@ -103,12 +104,13 @@ namespace xcore
 
 			bool		ReadStr(const char* str, u32 maxstrlen, u32& strlen);
 
+			void		Release();
+
 		protected:
-			inline		 IncomingMessage(const IncomingMessage&) : mData(0), mReadSize(0), mTotalSize(0) {}
+			inline		 IncomingMessage(const IncomingMessage&) : mData(0), mCursor(0) {}
 
 			void*		mData;
-			u32			mReadSize;
-			u32			mTotalSize;
+			u32			mCursor;
 		};
 	}
 }

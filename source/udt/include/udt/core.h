@@ -42,17 +42,17 @@ written by
 #define __UDT_CORE_H__
 
 
-#include "udt.h"
-#include "common.h"
-#include "list.h"
-#include "buffer.h"
-#include "window.h"
-#include "packet.h"
-#include "channel.h"
-#include "api.h"
-#include "ccc.h"
-#include "cache.h"
-#include "queue.h"
+#include "udt\udt.h"
+#include "udt\common.h"
+#include "udt\list.h"
+#include "udt\buffer.h"
+#include "udt\window.h"
+#include "udt\packet.h"
+#include "udt\channel.h"
+#include "udt\api.h"
+#include "udt\ccc.h"
+#include "udt\cache.h"
+#include "udt\queue.h"
 
 enum UDTSockType {UDT_STREAM = 1, UDT_DGRAM};
 

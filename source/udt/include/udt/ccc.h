@@ -43,8 +43,8 @@ written by
 #define __UDT_CCC_H__
 
 
-#include "udt.h"
-#include "packet.h"
+#include "udt\udt.h"
+#include "udt\packet.h"
 
 
 class UDT_API CCC

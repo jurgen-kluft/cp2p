@@ -29,7 +29,8 @@
 		<Item Src="pom.*" Dst="" />
 		<Item Src="source\main\cpp\**\*.cpp" Dst="source\main\cpp\" />
 		<Item Src="source\main\include\**\*.h" Dst="source\main\include\" />
-		<Item Src="source\main\resources\**\*.*" Dst="source\main\resources\" />
+		<Item Src="source\udt\cpp\**\*.cpp" Dst="source\udt\cpp\" />
+		<Item Src="source\udt\include\**\*.h" Dst="source\udt\include\" />
 		<Item Src="libs\**\*.*" Dst="libs\" />
 		<Item Src="docs\**\*.*" Dst="docs\" />
 		<Item Src="tools\**\*.*" Dst="Tools\" />
@@ -54,6 +55,7 @@
 				<xp2p_RootDir>$(SolutionDir)</xp2p_RootDir>
 				<xp2p_LibraryDir>$(SolutionDir)target\xp2p\outdir\xp2p_$(PackageSignature)\</xp2p_LibraryDir>
 				<xp2p_IncludeDir>$(SolutionDir)source\main\include\</xp2p_IncludeDir>
+				<udt_IncludeDir>$(SolutionDir)source\udt\include\</udt_IncludeDir>
 				<xp2p_TestIncludeDir>$(SolutionDir)source\test\include\</xp2p_TestIncludeDir>
 			</PropertyGroup>
 		</Properties>
@@ -63,6 +65,7 @@
 				<xp2p_RootDir>${Location}</xp2p_RootDir> 
 				<xp2p_LibraryDir>${Location}libs\</xp2p_LibraryDir>
 				<xp2p_IncludeDir>${Location}source\main\include\</xp2p_IncludeDir>
+				<udt_IncludeDir>${Location}source\udt\include\</udt_IncludeDir>
 				<xp2p_TestIncludeDir>${Location}source\test\include\</xp2p_TestIncludeDir>
 			</PropertyGroup>
 		</Properties>
@@ -72,6 +75,7 @@
 				<xp2p_RootDir>$(SolutionDir)target\xp2p\</xp2p_RootDir> 
 				<xp2p_LibraryDir>$(SolutionDir)target\xp2p\target\xp2p\outdir\xp2p_$(PackageSignature)\</xp2p_LibraryDir>
 				<xp2p_IncludeDir>$(SolutionDir)target\xp2p\source\main\include\</xp2p_IncludeDir>
+				<udt_IncludeDir>$(SolutionDir)target\xp2p\source\udt\include\</udt_IncludeDir>
 				<xp2p_TestIncludeDir>$(SolutionDir)target\xbase\source\test\include\</xp2p_TestIncludeDir>
 			</PropertyGroup>
 		</Properties>
@@ -88,7 +92,7 @@
 				</ImportGroup>
 				<ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='DevDebug|Win32'">
 					<ClCompile>
-						<AdditionalIncludeDirectories>$(xp2p_IncludeDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+						<AdditionalIncludeDirectories>$(${Name}_IncludeDir);$(udt_IncludeDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
 					</ClCompile>
 					<Link>
 						<AdditionalLibraryDirectories>$(${Name}_LibraryDir);</AdditionalLibraryDirectories>
@@ -97,7 +101,7 @@
 				</ItemDefinitionGroup>
 				<ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='DevRelease|Win32'">
 					<ClCompile>
-						<AdditionalIncludeDirectories>$(${Name}_IncludeDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+						<AdditionalIncludeDirectories>$(${Name}_IncludeDir);$(udt_IncludeDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
 					</ClCompile>
 					<Link>
 						<AdditionalLibraryDirectories>$(${Name}_LibraryDir);</AdditionalLibraryDirectories>
@@ -106,7 +110,7 @@
 				</ItemDefinitionGroup>
 				<ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='DevFinal|Win32'">
 					<ClCompile>
-						<AdditionalIncludeDirectories>$(${Name}_IncludeDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+						<AdditionalIncludeDirectories>$(${Name}_IncludeDir);$(udt_IncludeDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
 					</ClCompile>
 					<Link>
 						<AdditionalLibraryDirectories>$(${Name}_LibraryDir);</AdditionalLibraryDirectories>
@@ -115,7 +119,7 @@
 				</ItemDefinitionGroup>
 				<ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='TestDebug|Win32'">
 					<ClCompile>
-						<AdditionalIncludeDirectories>$(${Name}_IncludeDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+						<AdditionalIncludeDirectories>$(${Name}_IncludeDir);$(udt_IncludeDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
 					</ClCompile>
 					<Link>
 						<AdditionalLibraryDirectories>$(${Name}_LibraryDir);</AdditionalLibraryDirectories>
@@ -124,7 +128,7 @@
 				</ItemDefinitionGroup>
 				<ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='TestRelease|Win32'">
 					<ClCompile>
-						<AdditionalIncludeDirectories>$(${Name}_IncludeDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+						<AdditionalIncludeDirectories>$(${Name}_IncludeDir);$(udt_IncludeDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
 					</ClCompile>
 					<Link>
 						<AdditionalLibraryDirectories>$(${Name}_LibraryDir);</AdditionalLibraryDirectories>
@@ -133,7 +137,7 @@
 				</ItemDefinitionGroup>
 				<ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='DevDebug|x64'">
 					<ClCompile>
-						<AdditionalIncludeDirectories>$(xp2p_IncludeDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+						<AdditionalIncludeDirectories>$(${Name}_IncludeDir);$(udt_IncludeDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
 					</ClCompile>
 					<Link>
 						<AdditionalLibraryDirectories>$(${Name}_LibraryDir);</AdditionalLibraryDirectories>
@@ -142,7 +146,7 @@
 				</ItemDefinitionGroup>
 				<ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='DevRelease|x64'">
 					<ClCompile>
-						<AdditionalIncludeDirectories>$(${Name}_IncludeDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+						<AdditionalIncludeDirectories>$(${Name}_IncludeDir);$(udt_IncludeDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
 					</ClCompile>
 					<Link>
 						<AdditionalLibraryDirectories>$(${Name}_LibraryDir);</AdditionalLibraryDirectories>
@@ -151,7 +155,7 @@
 				</ItemDefinitionGroup>
 				<ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='DevFinal|x64'">
 					<ClCompile>
-						<AdditionalIncludeDirectories>$(${Name}_IncludeDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+						<AdditionalIncludeDirectories>$(${Name}_IncludeDir);$(udt_IncludeDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
 					</ClCompile>
 					<Link>
 						<AdditionalLibraryDirectories>$(${Name}_LibraryDir);</AdditionalLibraryDirectories>
@@ -160,7 +164,7 @@
 				</ItemDefinitionGroup>
 				<ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='TestDebug|x64'">
 					<ClCompile>
-						<AdditionalIncludeDirectories>$(${Name}_IncludeDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+						<AdditionalIncludeDirectories>$(${Name}_IncludeDir);$(udt_IncludeDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
 					</ClCompile>
 					<Link>
 						<AdditionalLibraryDirectories>$(${Name}_LibraryDir);</AdditionalLibraryDirectories>
@@ -169,7 +173,7 @@
 				</ItemDefinitionGroup>
 				<ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='TestRelease|x64'">
 					<ClCompile>
-						<AdditionalIncludeDirectories>$(${Name}_IncludeDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+						<AdditionalIncludeDirectories>$(${Name}_IncludeDir);$(udt_IncludeDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
 					</ClCompile>
 					<Link>
 						<AdditionalLibraryDirectories>$(${Name}_LibraryDir);</AdditionalLibraryDirectories>
@@ -178,9 +182,11 @@
 				</ItemDefinitionGroup>
 				<ItemGroup>
 					<ClCompile Include="source\main\cpp\**\*.cpp" />
+					<ClCompile Include="source\udt\cpp\**\*.cpp" />
 				</ItemGroup>
 				<ItemGroup>
 					<ClInclude Include="source\main\include\${Name}\**\*.h" />
+					<ClInclude Include="source\udt\include\udt\**\*.h" />
 				</ItemGroup>
 			</Project>
 		</ProjectFile>
