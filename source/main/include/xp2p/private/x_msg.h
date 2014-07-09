@@ -38,13 +38,13 @@ namespace xcore
 		struct message_system
 		{
 			u32				flags_;
-			PeerID			to_;
+			PeerID			remote_;
 		};
 
 		struct message_payload
 		{
 			u32				length_;
-			PeerID			from_;
+			PeerID			local_;
 			//void*			body;
 		};
 
@@ -53,12 +53,12 @@ namespace xcore
 			message_alloc			allocator;
 			message_system			system;		
 			message_payload			payload;		// <--- IncommingMessage is received here
-			//void*					payload;
+
 		};
 
-		bool		AllocateConnectEventMessage(PeerID peer);
-		bool		AllocateDisconnectEventMessage(PeerID peer);
-
+		message_chunk*		gAllocateEventConnectMessage(PeerID remote);
+		message_chunk*		gAllocateEventDisconnectMessage(PeerID remote);
+		message_chunk*		gAllocateDataPayloadMessage(PeerID remote, u32 size);
 	}
 }
 
