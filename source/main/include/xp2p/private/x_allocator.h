@@ -14,11 +14,11 @@ namespace xcore
 {
 	namespace xp2p
 	{
-		class IAllocator
+		class iallocator
 		{
 		public:
-			virtual void*	Alloc(u32 inSize, u32 inAlignment) = 0;
-			virtual void	Dealloc(void* inOldMem) = 0;
+			virtual void*	alloc(u32 _size, u32 _alignment) = 0;
+			virtual void	dealloc(void* _in_oldmem) = 0;
 		};
 	}
 }
