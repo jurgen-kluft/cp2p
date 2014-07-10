@@ -12,53 +12,64 @@
 
 namespace xcore
 {
-	namespace xp2p
+	namespace xnetio
 	{
-		class IAllocator;
+		class ns_allocator;
+		struct ns_message;
 
-		// P2P - Message (private)
-		// This represents a handle to a to-sent or received message.
-		class Message
+		struct ns_message_list_node
 		{
-		public:
-			virtual u32			Read(u32 inOffset, xbyte* inData, u32 inDataSize);
-			virtual u32			Write(u32 inOffset, xbyte const* inData, u32 inDataSize);
-
-		private:
-			virtual				~Message() {}
+			inline				ns_message_list_node() : next_(NULL), prev_(NULL)	{}
+			ns_message*			next_;
+			ns_message*			prev_;
 		};
 
-		struct message_alloc
+		struct ns_message_system
 		{
-			IAllocator*		allocator_;
-			u32				length_;
-			u32				magic_;
+			inline				ns_message_system() : flags_(0)		{}
+			u32					flags_;
 		};
 
-		struct message_system
+		struct ns_message_io_state
 		{
-			u32				flags_;
-			PeerID			remote_;
+			inline				ns_message_io_state() : length_(0)		{}
+			u32					length_;	// received or sent payload length
 		};
 
-		struct message_payload
+		struct ns_message_header
 		{
-			u32				length_;
-			PeerID			local_;
-			//void*			body;
+			u32					magic_;		// 'XP2P'
+			u32					length_;	// payload size (0-256KiB)
+			u32					from_;
+			u32					to_;
 		};
 
-		struct message_chunk
+		struct ns_message_payload
 		{
-			message_alloc			allocator;
-			message_system			system;		
-			message_payload			payload;		// <--- IncommingMessage is received here
-
+			//void*				body;
 		};
 
-		message_chunk*		gAllocateEventConnectMessage(PeerID remote);
-		message_chunk*		gAllocateEventDisconnectMessage(PeerID remote);
-		message_chunk*		gAllocateDataPayloadMessage(PeerID remote, u32 size);
+		struct ns_message
+		{
+			ns_allocator*				allocator_;
+			ns_message_list_node		list_;			// linked-list
+			ns_message_system			system_;		
+			ns_message_io_state			io_state_;
+			ns_message_header			header_;
+			ns_message_payload			payload_;		// <--- IncommingMessage is received here
+		};
+
+		bool			is_message_header_ok(ns_message_header const& _header);
+
+		ns_message*		create_event_connect_msg(ns_allocator * _allocator, u32 _remote);
+		ns_message*		create_event_disconnect_msg(ns_allocator * _allocator, u32 _remote);
+			
+		ns_message*		create_send_payload_msg(ns_allocator * _allocator, ns_message_header const& _header);
+		ns_message*		create_received_payload_msg(ns_allocator * _allocator, ns_message_header const& _header);
+
+		ns_message*		pop_msg(ns_message *& );
+		void			push_msg(ns_message *& , ns_message * );
+		void			release_msg(ns_message * );
 	}
 }
 
