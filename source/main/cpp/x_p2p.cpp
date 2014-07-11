@@ -1,7 +1,7 @@
 #include "xbase\x_target.h"
 #include "xbase\x_allocator.h"
+
 #include "xp2p\x_p2p.h"
-#include "xp2p\x_msg.h"
 
 namespace xcore
 {

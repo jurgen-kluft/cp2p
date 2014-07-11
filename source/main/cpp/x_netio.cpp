@@ -2,7 +2,7 @@
 #include "xbase/x_bit_field.h"
 
 #include "xp2p/private/x_netio.h"
-#include "xp2p/private/x_msg.h"
+#include "xp2p/private/x_netmsg.h"
 #include "xp2p/private/x_allocator.h"
 
 #undef UNICODE                  // Use ANSI WinAPI functions
@@ -653,7 +653,7 @@ namespace xcore
 						{
 							// Allocate a message to receive the payload
 							ns_message_system system;
-							_conn->incoming_message_ = ns_message_alloc(_allocator, system, _conn->header_);
+							_conn->incoming_message_ = ns_message_alloc(_allocator, NS_MSG_TYPE_DATA, _conn->header_.length_);
 						}
 					}
 				}
@@ -662,14 +662,14 @@ namespace xcore
 					if (_conn->incoming_message_ == NULL)
 					{
 						ns_message_system system;
-						_conn->incoming_message_ = ns_message_alloc(_allocator, system, _conn->header_);
+						_conn->incoming_message_ = ns_message_alloc(_allocator, NS_MSG_TYPE_DATA, _conn->header_.length_);
 					}
 				}
 
 				if (_conn->incoming_message_ != NULL)
 				{
 					s32 n = 0;
-					while ((n = recv(_conn->sock.s, (char*)(&_conn->incoming_message_->payload_) + _conn->incoming_message_->io_state_.length_, _conn->incoming_message_->header_.length_ - _conn->incoming_message_->io_state_.length_, 0)) > 0) 
+					while ((n = recv(_conn->sock.s, (char*)(_conn->incoming_message_->payload()) + _conn->incoming_message_->io_state_.length_, _conn->incoming_message_->header_.length_ - _conn->incoming_message_->io_state_.length_, 0)) > 0) 
 					{
 						DBG(("%p %d <- %d bytes (PLAIN)", _conn, _conn->flags, n));
 						_conn->incoming_message_->io_state_.length_ += n;
