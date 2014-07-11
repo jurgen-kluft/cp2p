@@ -19,18 +19,18 @@ namespace xcore
 	{
 		// P2P - Peer
 		// This represents a peer in the network.
-		class IPeer
+		class ipeer
 		{
 		public:
-			enum EStatus { CONNECTING, CONNECTED, DISCONNECTING, DISCONNECTED };
+			enum estatus { CONNECTING, CONNECTED, DISCONNECTING, DISCONNECTED };
 
-			virtual bool		IsRemote() const = 0;
-			virtual EStatus		GetStatus() const = 0;
-			virtual NetIP4		GetIP4() const = 0;
-			virtual PeerID		GetID() const = 0;
+			virtual bool		is_remote() const = 0;
+			virtual estatus		get_status() const = 0;
+			virtual netip4		get_ip4() const = 0;
+			virtual peerid		get_id() const = 0;
 
 		private:
-			virtual				~IPeer() {}
+			virtual				~ipeer() {}
 		};
 
 	}

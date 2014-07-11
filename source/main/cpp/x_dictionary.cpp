@@ -14,7 +14,7 @@ namespace xcore
 		class PeerDictionary : public Dictionary
 		{
 		public:
-									PeerDictionary(IAllocator* allocator);
+									PeerDictionary(iallocator* allocator);
 			virtual					~PeerDictionary() {}
 
 			virtual IPeer*			RegisterPeer(PeerID, NetIP4);
@@ -25,12 +25,12 @@ namespace xcore
 			XCORE_CLASS_PLACEMENT_NEW_DELETE
 
 		private:
-			IAllocator*				mAllocator;
+			iallocator*				mAllocator;
 			s32						mNumPeers;
 			IPeer*					mPeers[1024];
 		};
 
-		PeerDictionary::PeerDictionary(IAllocator* allocator)
+		PeerDictionary::PeerDictionary(iallocator* allocator)
 			: mAllocator(allocator)
 			, mNumPeers(0)
 		{
@@ -69,9 +69,9 @@ namespace xcore
 		}
 
 
-		Dictionary*		gCreateDictionary(IAllocator* allocator)
+		Dictionary*		gCreateDictionary(iallocator* allocator)
 		{
-			void* mem = allocator->Alloc(sizeof(PeerDictionary), sizeof(void*));
+			void* mem = allocator->alloc(sizeof(PeerDictionary), sizeof(void*));
 			PeerDictionary* dict = new (mem)PeerDictionary(allocator);
 			return dict;
 		}

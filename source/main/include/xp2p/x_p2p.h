@@ -17,37 +17,35 @@ namespace xcore
 	// ==============================================================================================================================
 	namespace xp2p
 	{
-		class IAllocator;
-		class IPeer;
-		class OutgoingMessage;
-		class IncomingMessage;
+		class iallocator;
+		class ipeer;
+		class outgoing_message;
+		class incoming_message;
 
-		class P2P
+		class node
 		{
 		public:
-								P2P(IAllocator* memory_allocator);
-								~P2P();
+								node(iallocator* memory_allocator);
+								~node();
 
-			IPeer*				Start(NetIP4 localhost);
-			void				Stop();
+			ipeer*				start(netip4 localhost);
+			void				stop();
 
-			IPeer*				RegisterPeer(PeerID id, NetIP4 endpoint);
-			void				UnregisterPeer(IPeer*);
+			ipeer*				register_peer(peerid id, netip4 endpoint);
+			void				unregister_peer(ipeer*);
 
-			void				ConnectTo(IPeer* peer);
-			void				DisconnectFrom(IPeer* peer);
+			void				connect_to(ipeer* peer);
+			void				disconnect_from(ipeer* peer);
 
-			u32					Connections(IPeer** outPeerList, u32 sizePeerList);
+			u32					connections(ipeer** _out_peers, u32 _in_max_peers);
 
-			bool				CreateMsg(OutgoingMessage&, IPeer* to, u32 size);
-			void				SendMsg(OutgoingMessage&);
+			bool				create_message(outgoing_message&, ipeer* to, u32 size);
 
-			bool				ReceiveMsg(IncomingMessage&, u32 _ms_to_wait=0);
+			bool				process(incoming_message&, u32 _ms_to_wait=0);
 
 		protected:
-			IAllocator*			mAllocator;
-			class Implementation;
-			Implementation*		mImplementation;
+			iallocator*			allocator_;
+			class node_imp*		imp_;
 		};
 
 	}
