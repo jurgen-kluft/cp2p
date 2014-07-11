@@ -1,8 +1,8 @@
 //==============================================================================
-//  x_msg.h (private)
+//  x_netmsg.h (private)
 //==============================================================================
-#ifndef __XPEER_2_PEER_MSG_PRIVATE_H__
-#define __XPEER_2_PEER_MSG_PRIVATE_H__
+#ifndef __XPEER_2_PEER_NETWORK_MSG_PRIVATE_H__
+#define __XPEER_2_PEER_NETWORK_MSG_PRIVATE_H__
 #include "xbase\x_target.h"
 #ifdef USE_PRAGMA_ONCE 
 #pragma once 
@@ -27,6 +27,7 @@ namespace xcore
 		struct ns_message_system
 		{
 			inline				ns_message_system() : allocator_(NULL), flags_(0)	{}
+			inline				ns_message_system(ns_allocator* _a, u32 _f) : allocator_(_a), flags_(_f) {}
 			ns_allocator*		allocator_;
 			u32					flags_;
 		};
@@ -41,15 +42,8 @@ namespace xcore
 		{
 			u32					magic_;		// 'XP2P'
 			u32					length_;	// payload size (0-256KiB)
-			u32					from_;
-			u32					to_;
 
 			bool				is_valid() const;
-		};
-
-		struct ns_message_payload
-		{
-			//void*				body;
 		};
 
 		struct ns_message
@@ -58,10 +52,17 @@ namespace xcore
 			ns_message_system			system_;		
 			ns_message_io_state			io_state_;
 			ns_message_header			header_;
-			ns_message_payload			payload_;		// <--- IncommingMessage is received here
+			inline xbyte*				payload()		{ return (xbyte*)&header_ + sizeof(ns_message_header); }
 		};
 
-		ns_message*		ns_message_alloc(ns_allocator * _allocator, ns_message_system const& _system, ns_message_header const& _header);
+		enum ns_message_type
+		{
+			NS_MSG_TYPE_EVENT_CONNECTED,
+			NS_MSG_TYPE_EVENT_DISCONNECTED,
+			NS_MSG_TYPE_DATA,
+		};
+
+		ns_message*		ns_message_alloc(ns_allocator * _allocator, ns_message_type _type, u32 _sizeof_payload);
 		void			ns_message_dealloc(ns_message * );
 
 		ns_message*		ns_message_dequeue(ns_message *& );
@@ -69,4 +70,4 @@ namespace xcore
 	}
 }
 
-#endif	///< __XPEER_2_PEER_MSG_PRIVATE_H__
+#endif	///< __XPEER_2_PEER_NETWORK_MSG_PRIVATE_H__
