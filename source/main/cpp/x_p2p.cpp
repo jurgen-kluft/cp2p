@@ -13,7 +13,7 @@ namespace xcore
 		};
 
 
-		P2P::P2P(IAllocator* inSystemAllocator) : mAllocator(inSystemAllocator), mImplementation(NULL)
+		P2P::P2P(iallocator* inSystemAllocator) : mAllocator(inSystemAllocator), mImplementation(NULL)
 		{
 		}
 

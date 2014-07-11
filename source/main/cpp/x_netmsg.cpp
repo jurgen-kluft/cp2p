@@ -17,10 +17,12 @@ namespace xcore
 
 		ns_message*		ns_message_alloc(ns_allocator * _allocator, ns_message_type _type, u32 _sizeof_payload)
 		{
-			u32 message_size = sizeof(ns_message) + _sizeof_payload + sizeof(ns_message_header);
+			u32 const message_size = sizeof(ns_message) + ((_sizeof_payload + 3) & 0xfffffffc);
 			ns_message * message = (ns_message*)_allocator->alloc(message_size, sizeof(void*));
 			message->list_ = ns_message_list_node();
 			message->system_ = ns_message_system(_allocator, _type);
+			message->io_state_ = ns_message_io_state();
+			message->header_ = ns_message_header(_sizeof_payload);
 			return message;
 		}
 
@@ -34,9 +36,10 @@ namespace xcore
 			if (_msg_queue == NULL)
 				return NULL;
 
-			ns_message * msg = _msg_queue;
-			ns_message * head = msg->list_.next_;
-			ns_message * tail = msg->list_.prev_;
+			ns_message * head = _msg_queue;
+			ns_message * tail = _msg_queue->list_.prev_;
+			ns_message * msg = tail;
+			tail = tail->list_.prev_;
 			head->list_.prev_ = tail;
 			tail->list_.next_ = head;
 
@@ -50,6 +53,8 @@ namespace xcore
 		{
 			if (_msg_queue == NULL)
 			{
+				_msg->list_.next_ = _msg;
+				_msg->list_.prev_ = _msg;
 				_msg_queue = _msg;
 			}
 			else

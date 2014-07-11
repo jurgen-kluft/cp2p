@@ -40,6 +40,9 @@ namespace xcore
 
 		struct ns_message_header
 		{
+			inline				ns_message_header() : magic_('XP2P'), length_(0) {}
+			inline				ns_message_header(u32 _length) : magic_('XP2P'), length_(_length) {}
+
 			u32					magic_;		// 'XP2P'
 			u32					length_;	// payload size (0-256KiB)
 

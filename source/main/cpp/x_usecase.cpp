@@ -17,25 +17,21 @@ namespace xcore
 			return NULL;
 		}
 
-		static void gEndPointToStr(NetIP4 ip, char* outString, u32 inStringMaxLen)
+		static void gEndPointToStr(netip4 ip, char* outString, u32 inStringMaxLen)
 		{
 		}
 
 
-		class MyAllocator : public IAllocator
+		class MyAllocator : public iallocator
 		{
 		public:
 								MyAllocator(x_iallocator* inSystemAllocator) : mSystemAllocator(inSystemAllocator) {}
 
-			virtual void*		Alloc(u32 inSize, u32 inAlignment)
+			virtual void*		alloc(u32 inSize, u32 inAlignment)
 			{
 				return mOurAllocator->allocate(inSize, inAlignment);
 			}
-			virtual void*		Realloc(void* inOldMem, u32 inNewSize, u32 inNewAlignment)
-			{
-				return mOurAllocator->reallocate(inOldMem, inNewSize, inNewAlignment);
-			}
-			virtual void		Dealloc(void* inOldMem)
+			virtual void		dealloc(void* inOldMem)
 			{
 				mOurAllocator->deallocate(inOldMem);
 			}
@@ -64,60 +60,63 @@ namespace xcore
 		{
 			MyAllocator* ourSystemAllocator = MyAllocator::sCreate(inSystemAllocator, 2 * 1024 * 1024);
 			
-			xp2p::P2P system(ourSystemAllocator);
-			xp2p::P2P* node = &system;
-			IPeer* host = node->Start(NetIP4().Port(5008));
+			xp2p::node system(ourSystemAllocator);
+			xp2p::node* node = &system;
+			ipeer* host = node->start(netip4().port(51888));
 
-			// Let's connect to a peer
-			IPeer* remotePeer = node->RegisterPeer(PeerID(1234), NetIP4(10, 0, 0, 24).Port(5008));
-			node->ConnectTo(remotePeer);
+			// Let's connect to the tracker
+			ipeer* remote_peer = node->register_peer(peerid(0), netip4(10, 0, 8, 12).port(51888));
+			node->connect_to(remote_peer);
 
-			while (remotePeer != NULL)
+			while (remote_peer != NULL)
 			{
-				IncomingMessage rmsg;
-				if (node->ReceiveMsg(rmsg, 1000))	// Wait 1000 ms
+				incoming_message rmsg;
+				if (node->process(rmsg, 1000))	// Wait a maximum of 1000 ms
 				{
-					if (rmsg.IsFrom(remotePeer))
+					while (!rmsg.is_empty())
 					{
-						if (rmsg.Type().IsEvent())
+						if (rmsg.is_from(remote_peer))
 						{
-							if (rmsg.Event().IsConnected())
+							if (rmsg.type().is_event())
 							{
-								OutgoingMessage tmsg;
-								node->CreateMsg(tmsg, remotePeer, 40);
-								tmsg.Write("Hello remote peer, how are you?");
-								node->SendMsg(tmsg);
+								if (rmsg.event().is_connected())
+								{
+									outgoing_message tmsg;
+									node->create_message(tmsg, remote_peer, 40);
+									tmsg.write("Hello remote peer, how are you?");
+								}
+								else if (rmsg.event().is_not_connected())
+								{
+									// Remote peer has disconnected or cannot connect
+									break;
+								}
 							}
-							else if (rmsg.Event().IsDisconnected())
+							else if (rmsg.type().has_data())
 							{
-								// Remote peer has disconnected
-								remotePeer = NULL;
-								break;
-							}
-						}
-						else if (rmsg.Type().HasData())
-						{
-							char ip4_str[32];
-							remotePeer->GetIP4().ToString(ip4_str, sizeof(ip4_str));
+								char ip4_str[32];
+								remote_peer->get_ip4().to_string(ip4_str, sizeof(ip4_str));
 
-							char msgString[256];
-							u32 msgStringLen;
-							rmsg.ReadStr(msgString, sizeof(msgString), msgStringLen);
-							x_printf("Message \"%s\"received from Peer \"%s\"", x_va_list(x_va((const char*)msgString), x_va(ip4_str)));
+								char msgString[256];
+								u32 msgStringLen;
+								rmsg.read_string(msgString, sizeof(msgString), msgStringLen);
+								x_printf("info: message \"%s\"received from Peer \"%s\"", x_va_list(x_va((const char*)msgString), x_va(ip4_str)));
+							}
 						}
-					}
-					else
-					{
-						//break;
+						else
+						{
+							//break;
+						}
+						incoming_message m(rmsg);
+						rmsg.next();
 					}
 				}
 			}
 
 			// Clear all pointers
-			remotePeer = NULL;
+			remote_peer = NULL;
 
 			// Stop all threads, close all sockets, release all resources
-			node->Stop();
+			node->stop();
 
 			// Release our allocators and their memory back to the system allocator
 			MyAllocator::sRelease(ourSystemAllocator);
