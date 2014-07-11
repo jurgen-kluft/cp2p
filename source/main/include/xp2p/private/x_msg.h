@@ -26,7 +26,8 @@ namespace xcore
 
 		struct ns_message_system
 		{
-			inline				ns_message_system() : flags_(0)		{}
+			inline				ns_message_system() : allocator_(NULL), flags_(0)	{}
+			ns_allocator*		allocator_;
 			u32					flags_;
 		};
 
@@ -42,6 +43,8 @@ namespace xcore
 			u32					length_;	// payload size (0-256KiB)
 			u32					from_;
 			u32					to_;
+
+			bool				is_valid() const;
 		};
 
 		struct ns_message_payload
@@ -51,7 +54,6 @@ namespace xcore
 
 		struct ns_message
 		{
-			ns_allocator*				allocator_;
 			ns_message_list_node		list_;			// linked-list
 			ns_message_system			system_;		
 			ns_message_io_state			io_state_;
@@ -59,17 +61,11 @@ namespace xcore
 			ns_message_payload			payload_;		// <--- IncommingMessage is received here
 		};
 
-		bool			is_message_header_ok(ns_message_header const& _header);
+		ns_message*		ns_message_alloc(ns_allocator * _allocator, ns_message_system const& _system, ns_message_header const& _header);
+		void			ns_message_dealloc(ns_message * );
 
-		ns_message*		create_event_connect_msg(ns_allocator * _allocator, u32 _remote);
-		ns_message*		create_event_disconnect_msg(ns_allocator * _allocator, u32 _remote);
-			
-		ns_message*		create_send_payload_msg(ns_allocator * _allocator, ns_message_header const& _header);
-		ns_message*		create_received_payload_msg(ns_allocator * _allocator, ns_message_header const& _header);
-
-		ns_message*		pop_msg(ns_message *& );
-		void			push_msg(ns_message *& , ns_message * );
-		void			release_msg(ns_message * );
+		ns_message*		ns_message_dequeue(ns_message *& );
+		void			ns_message_enqueue(ns_message *& , ns_message * );
 	}
 }
 

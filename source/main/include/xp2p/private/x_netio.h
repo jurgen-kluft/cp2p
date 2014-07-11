@@ -20,10 +20,10 @@ namespace xcore
 		enum ns_event 
 		{
 			NS_EVENT_POLL,     // Sent to each connection on each call to ns_server_poll()
-			NS_EVENT_ACCEPT,   // New connection accept()-ed. union socket_address *remote_addr
+			NS_EVENT_ACCEPT,   // New connection accept()-ed. socket_address * remote_addr
 			NS_EVENT_CONNECT,  // connect() succeeded or failed. int *success_status
-			NS_EVENT_RECV,     // Data has benn received. int *num_bytes
-			NS_EVENT_SEND,     // Data has been written to a socket. int *num_bytes
+			NS_EVENT_RECV,     // A message has been received. ns_message_header * header
+			NS_EVENT_SEND,     // A message has been written to a socket. ns_message_header * header
 			NS_EVENT_CLOSE     // Connection is closed. NULL
 		};
 
@@ -37,15 +37,17 @@ namespace xcore
 		typedef void (*ns_callback_t)(ns_connection *, ns_event, void *evp);
 
 		void			ns_server_init(ns_allocator *, ns_server *&, ns_allocator * msg_allocator, void * server_data, ns_callback_t);
+		s32				ns_server_bind(ns_server *, const char * addr);
 		void			ns_server_free(ns_server *);
-		s32				ns_server_poll(ns_server *, ns_message *& _out_rcvd_messages, ns_message *& _in_tosend_messages, s32 milli);
+		
+		s32				ns_server_poll(ns_server *, ns_message *& _out_rcvd_messages, s32 milli);
+		
 		void			ns_server_wakeup(ns_server *);
 		void			ns_server_wakeup_ex(ns_server *, ns_callback_t, void *, u32);
-		void			ns_iterate(ns_server *, ns_callback_t cb, void *param);
+		void			ns_server_foreach_connection(ns_server *, ns_callback_t cb, void *param);
 
-		s32				ns_bind(ns_server *, const char * addr);
-		ns_connection*	ns_connect(ns_server *, const char *host, s32 port, s32 ssl, void * connection_param);
-
+		ns_connection*	ns_connect(ns_server *, const char *host, s32 port, void * connection_param);
+		void			ns_send(ns_connection *, ns_message * );
 	}
 }
 

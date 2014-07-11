@@ -28,13 +28,11 @@
 #include <assert.h>
 #include <errno.h>
 #include <fcntl.h>
-//#include <stdarg.h>
-//#include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
-#include <signal.h>
+//#include <signal.h>
 
 #ifdef _MSC_VER
 #pragma comment(lib, "ws2_32.lib")    // Linking with winsock library
@@ -180,7 +178,7 @@ namespace xcore
 				, connection_data(NULL)
 				, last_io_time(0)
 				, incoming_message_(NULL)
-				, outgoing_message_(NULL)
+				, outgoing_messages_(NULL)
 				, flags(0)
 			{
 				memset(&sa, 0, sizeof(socket_address));
@@ -199,7 +197,7 @@ namespace xcore
 			ns_message_header		header_;
 			ns_message*				incoming_message_;
 
-			ns_message*				outgoing_message_;
+			ns_message*				outgoing_messages_;
 
 			u32						flags;
 
@@ -286,6 +284,11 @@ namespace xcore
 			DBG(("%p %d", conn, conn->flags));
 			ns_connection * conn = server->active_connections[conn_index];
 			ns_call(conn, NS_EVENT_CLOSE, NULL);
+			while (conn->outgoing_messages_ != NULL)
+			{
+				ns_message * msg = ns_message_dequeue(conn->outgoing_messages_);
+				ns_message_dealloc(msg);
+			}
 			ns_remove_conn(server, conn_index);
 			closesocket(conn->sock.s);
 			NS_FREE(conn);
@@ -474,12 +477,12 @@ namespace xcore
 		}
 
 
-		s32 ns_bind(ns_server *server, const char *str) 
+		s32 ns_server_bind(ns_server *server, const char *str) 
 		{
-			union socket_address sa;
+			socket_address sa;
 			ns_parse_port_string(str, &sa);
 			ns_close_sock(server->listening_sock);
-			server->listening_sock = (ns_socket_t)ns_open_listening_socket(&sa);
+			server->listening_sock = ns_open_listening_socket(&sa);
 			return server->listening_sock.is_valid() ? (s32) ntohs(sa.sin.sin_port) : -1;
 		}
 
@@ -640,7 +643,7 @@ namespace xcore
 
 						// Validate the message header, if it is invalid
 						// then terminate this connection.
-						if (!is_message_header_ok(_conn->header_))
+						if (!_conn->header_.is_valid())
 						{
 							// Protocol violation
 							_conn->flags |= NSF_CLOSE_IMMEDIATELY;
@@ -649,14 +652,18 @@ namespace xcore
 						else
 						{
 							// Allocate a message to receive the payload
-							_conn->incoming_message_ = create_received_payload_msg(_allocator, _conn->header_);
+							ns_message_system system;
+							_conn->incoming_message_ = ns_message_alloc(_allocator, system, _conn->header_);
 						}
 					}
 				}
 				else
 				{
 					if (_conn->incoming_message_ == NULL)
-						_conn->incoming_message_ = create_received_payload_msg(_allocator, _conn->header_);
+					{
+						ns_message_system system;
+						_conn->incoming_message_ = ns_message_alloc(_allocator, system, _conn->header_);
+					}
 				}
 
 				if (_conn->incoming_message_ != NULL)
@@ -677,20 +684,20 @@ namespace xcore
 
 					if (ns_is_error(n))
 					{
-						release_msg(_conn->incoming_message_);
+						ns_message_dealloc(_conn->incoming_message_);
 						_conn->incoming_message_ = NULL;
 						_conn->flags |= NSF_CLOSE_IMMEDIATELY;
 						result = -1;
 					}
 				}
 			}
+			return result;
 		}
 
 		static int ns_write_to_socket(ns_connection * _conn) 
 		{
 			s32 result = 0;
-
-			ns_message * msg = _conn->outgoing_message_;
+			ns_message * msg = _conn->outgoing_messages_;
 			if (msg == NULL)
 				return result;
 
@@ -700,10 +707,8 @@ namespace xcore
 			DBG(("%p %d -> %d bytes", conn, conn->flags, n));
 			if (ns_is_error(n)) 
 			{
-				release_msg(msg);
-				msg = NULL;
-				_conn->outgoing_message_ = NULL;
 				_conn->flags |= NSF_CLOSE_IMMEDIATELY;
+				msg = NULL;
 				result = -1;
 			}
 			else 
@@ -713,7 +718,8 @@ namespace xcore
 				if (msg->io_state_.length_ == msg->header_.length_) 
 				{
 					ns_call(_conn, NS_EVENT_SEND, msg);
-					release_msg(msg);
+					ns_message_dequeue(_conn->outgoing_messages_);
+					ns_message_dealloc(msg);
 					result = 1;
 				}
 			}
@@ -732,7 +738,7 @@ namespace xcore
 			}
 		}
 
-		s32 ns_server_poll(ns_server * server, ns_message *& _out_rcvd_messages, ns_message *& _in_tosend_messages, s32 milli) 
+		s32 ns_server_poll(ns_server * server, ns_message *& _out_rcvd_messages, s32 milli) 
 		{
 			if (!server->listening_sock.is_valid() || server->num_active_connections == 0) 
 				return 0;
@@ -745,22 +751,20 @@ namespace xcore
 			ns_add_to_set(server->listening_sock, &read_set, &max_fd);
 			ns_add_to_set(server->ctl[1], &read_set, &max_fd);
 
-			// Mark all the connections that need READ
+			// Mark all the connections that need READ/WRITE
 			for (s32 i=0; i<server->num_active_connections; ++i) 
 			{
 				ns_connection* c = server->active_connections[i];
 				xbfSet(c->flags, NSF_WANT_READ);
-			}
 
-			// Mark all the connections that need WRITE
-			ns_message * out_msg = _in_tosend_messages;
-			while (out_msg != NULL)
-			{
-				u32 id = out_msg->header_.to_;
-				ns_connection* c = ns_find_connection_by_id(server, id);
-				if (c != NULL && xbfIsSet(c->flags, NSF_CONNECTING))
+				if (xbfIsSet(c->flags, NSF_CONNECTING))
+				{
 					xbfSet(c->flags, NSF_WANT_WRITE);
-				out_msg = out_msg->list_.next_;
+				}
+				else if (c->outgoing_messages_!=NULL)
+				{
+					xbfSet(c->flags, NSF_WANT_WRITE);
+				}
 			}
 
 			// populate the read and write set for the 'select' poller
@@ -791,7 +795,6 @@ namespace xcore
 							//DBG(("%p read_set", conn));
 							ns_add_to_set(conn->sock, &read_set, &max_fd);
 						}
-
 						if (xbfIsSet(conn->flags, NSF_WANT_WRITE)) 
 						{
 							//DBG(("%p write_set", conn));
@@ -840,7 +843,7 @@ namespace xcore
 					send(server->ctl[1].s, ctl_msg.message, 1, 0);
 					if (len >= (s32) sizeof(ctl_msg.callback) && ctl_msg.callback != NULL) 
 					{
-						ns_iterate(server, ctl_msg.callback, ctl_msg.message);
+						ns_server_foreach_connection(server, ctl_msg.callback, ctl_msg.message);
 					}
 				}
 
@@ -863,11 +866,11 @@ namespace xcore
 						if (FD_ISSET(conn->sock.s, &read_set)) 
 						{
 							conn->last_io_time = current_time;
-							while (ns_read_from_socket(server->allocator, conn) == 1)
+							while (ns_read_from_socket(server->msg_allocator, conn) == 1)
 							{
 								ns_message* incoming_msg = conn->incoming_message_;
 								conn->incoming_message_ = NULL;
-								push_msg(_out_rcvd_messages, incoming_msg);
+								ns_message_enqueue(_out_rcvd_messages, incoming_msg);
 							}
 						}
 
@@ -880,18 +883,12 @@ namespace xcore
 								s32 status = 1;
 								ns_call(conn, NS_EVENT_CONNECT, &status);
 							} 
-							else
-							{
-								conn->last_io_time = current_time;
 
-								while (_in_tosend_messages != NULL)							
-								{
-									if (conn->outgoing_message_ == NULL)
-										conn->outgoing_message_ = pop_msg(_in_tosend_messages);
-								
-									if (ns_write_to_socket(conn) <= 0)
-										break;
-								}
+							conn->last_io_time = current_time;
+
+							// Write as many messages to the socket
+							while (ns_write_to_socket(conn)==1)
+							{
 							}
 						}
 					}
@@ -916,15 +913,13 @@ namespace xcore
 			return server->num_active_connections;
 		}
 
-		ns_connection * ns_connect(ns_server *server, const char *host, s32 port, s32 use_ssl, void *param) 
+		ns_connection * ns_connect(ns_server *server, const char *host, s32 port, void *param) 
 		{
 			ns_socket_t sock;
 			sockaddr_in sin;
 			hostent *he = NULL;
 			ns_connection *conn = NULL;
 			s32 connect_ret_val;
-
-			(void) use_ssl;
 
 			if (host == NULL || (he = gethostbyname(host)) == NULL || (sock.s = socket(AF_INET, SOCK_STREAM, 0)) == INVALID_SOCKET) 
 			{
@@ -968,6 +963,11 @@ namespace xcore
 			return conn;
 		}
 
+		void			ns_send(ns_connection * conn, ns_message * msg)
+		{
+			ns_message_enqueue(conn->outgoing_messages_, msg);
+		}
+
 		ns_connection * ns_add_sock(ns_server *s, ns_socket_t sock, void *p) 
 		{
 			ns_connection *conn;
@@ -985,7 +985,7 @@ namespace xcore
 			return conn;
 		}
 
-		void ns_iterate(ns_server *server, ns_callback_t cb, void *param)
+		void ns_server_foreach_connection(ns_server *server, ns_callback_t cb, void *param)
 		{
 			for (s32 i=0; i<server->num_active_connections; ++i) 
 			{
@@ -1011,11 +1011,12 @@ namespace xcore
 			ns_server_wakeup_ex(server, NULL, (void *) "", 0);
 		}
 
-		void ns_server_init(ns_allocator *a, ns_server *& server, void * server_data, ns_callback_t cb) 
+		void ns_server_init(ns_allocator * _allocator, ns_server *& server, ns_allocator * msg_allocator, void * server_data, ns_callback_t cb) 
 		{
-			void * ip_mem = a->alloc(sizeof(ns_server), sizeof(void*));
+			void * ip_mem = _allocator->alloc(sizeof(ns_server), sizeof(void*));
 			server = new (ip_mem) ns_server();
-			server->allocator = a;
+			server->allocator = _allocator;
+			server->msg_allocator = msg_allocator;
 
 			server->listening_sock.clear();
 			server->ctl[0].clear();
@@ -1040,15 +1041,13 @@ namespace xcore
 
 			// Do one last poll, see https://github.com/cesanta/mongoose/issues/286
 			ns_message * incoming_messages = NULL;
-			ns_message * outgoing_messages = NULL;
-			ns_server_poll(s, incoming_messages, outgoing_messages, 0);
+			ns_server_poll(s, incoming_messages, 0);
 
 			// Release all incoming messages
 			while (incoming_messages != NULL)
 			{
-				ns_message * msg = incoming_messages;
-				incoming_messages = incoming_messages->list_.next_;
-				release_msg(msg);
+				ns_message * msg = ns_message_dequeue(incoming_messages);
+				ns_message_dealloc(msg);
 			}
 
 			ns_close_sock(s->listening_sock);
@@ -1057,8 +1056,7 @@ namespace xcore
 
 			for (s32 i=0; i<s->num_active_connections; ++i) 
 			{
-				ns_connection * conn = s->active_connections[i];
-				ns_close_conn(s, conn);
+				ns_close_conn(s, i);
 			}
 
 			s->allocator->dealloc(s);
