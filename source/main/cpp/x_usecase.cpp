@@ -68,30 +68,32 @@ namespace xcore
 			ipeer* remote_peer = node->register_peer(peerid(0), netip4(10, 0, 8, 12).port(51888));
 			node->connect_to(remote_peer);
 
+			incoming_messages rcvd_messages;
 			while (remote_peer != NULL)
 			{
-				incoming_message rmsg;
-				if (node->process(rmsg, 1000))	// Wait a maximum of 1000 ms
+				if (node->event_loop(rcvd_messages, 1000))	// Wait a maximum of 1000 ms
 				{
-					while (!rmsg.is_empty())
+					while (!rcvd_messages.is_empty())
 					{
-						if (rmsg.is_from(remote_peer))
+						incoming_message rmsg = rcvd_messages.dequeue();
+
+						if (rmsg.header().is_from(remote_peer->get_id()))
 						{
-							if (rmsg.type().is_event())
+							if (rmsg.header().is_event())
 							{
-								if (rmsg.event().is_connected())
+								if (rmsg.header().is_connected())
 								{
 									outgoing_message tmsg;
 									node->create_message(tmsg, remote_peer, 40);
 									tmsg.write("Hello remote peer, how are you?");
 								}
-								else if (rmsg.event().is_not_connected())
+								else if (rmsg.header().is_not_connected())
 								{
 									// Remote peer has disconnected or cannot connect
 									break;
 								}
 							}
-							else if (rmsg.type().has_data())
+							else if (rmsg.header().is_data())
 							{
 								char ip4_str[32];
 								remote_peer->get_ip4().to_string(ip4_str, sizeof(ip4_str));
@@ -106,8 +108,6 @@ namespace xcore
 						{
 							//break;
 						}
-						incoming_message m(rmsg);
-						rmsg.next();
 					}
 				}
 			}

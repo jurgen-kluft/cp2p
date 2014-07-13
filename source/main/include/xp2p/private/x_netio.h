@@ -28,26 +28,24 @@ namespace xcore
 		};
 
 		// Forward declares
-		struct ns_message;
 		struct ns_server;
-		struct ns_connection;
+		class ns_connection;
+		class io_protocol;
 
 		// Callback function (event handler) prototype, must be defined by user.
 		// Net skeleton will call event handler, passing events defined above.
 		typedef void (*ns_callback_t)(ns_connection *, ns_event, void *evp);
 
-		void			ns_server_init(ns_allocator *, ns_server *&, ns_allocator * msg_allocator, void * server_data, ns_callback_t);
+		void			ns_server_init(ns_allocator *, ns_server *&, io_protocol * , void * server_data, ns_callback_t);
 		s32				ns_server_bind(ns_server *, const char * addr);
 		void			ns_server_free(ns_server *);
 		
-		s32				ns_server_poll(ns_server *, ns_message *& _out_rcvd_messages, s32 milli);
-		
+		s32				ns_server_poll(ns_server *, s32 milli);
+		ns_connection*	ns_connect(ns_server *, const char *host, s32 port, void * connection_param);
+
 		void			ns_server_wakeup(ns_server *);
 		void			ns_server_wakeup_ex(ns_server *, ns_callback_t, void *, u32);
 		void			ns_server_foreach_connection(ns_server *, ns_callback_t cb, void *param);
-
-		ns_connection*	ns_connect(ns_server *, const char *host, s32 port, void * connection_param);
-		void			ns_send(ns_connection *, ns_message * );
 	}
 }
 
