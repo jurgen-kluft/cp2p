@@ -17,102 +17,124 @@ namespace xcore
 	{
 		class ipeer;
 
-		struct message_type
+		class message_allocator
 		{
-			inline			message_type(bool _is_event) : is_event_(_is_event) {}
-
-			inline bool		is_event() const					{ return is_event_; }
-			inline bool		has_data() const					{ return !is_event_; }
-
-		private:
-			bool			is_event_;
+		public:
+			virtual void*		allocate(u32 size, u32 alignment) = 0;
+			virtual void		deallocate(void*) = 0;
 		};
 
-		struct message_event
+		struct message_header
 		{
-			inline			message_event(bool _is_connected, bool _cannot_connect) : is_connected_(_is_connected), cannot_connect_(_cannot_connect) {}
+			inline				message_header() : flags_(0), from_(0), to_(0) {}
+			inline				message_header(u32 _flags, peerid _from, peerid _to) : flags_(_flags), from_(_from), to_(_to) {}
 
-			inline bool		is_connected() const				{ return is_connected_; }
-			inline bool		is_not_connected() const			{ return !is_connected_; }
+			bool				is_event() const;
+			bool				is_data() const;
 
-			inline bool		cannot_connect() const				{ return cannot_connect_; }
+			bool				is_connected() const;
+			bool				is_not_connected() const;
+			bool				cannot_connect() const;
+
+			bool				is_from(peerid) const;
 
 		private:
-			bool			is_connected_;
-			bool			cannot_connect_;
+			u32					flags_;
+			peerid				from_;
+			peerid				to_;
+		};
+
+		struct message_data
+		{
+			inline				message_data() : data_(NULL), size_(0), cursor_(0) {}
+
+			u32					size_;
+			message_allocator*	allocator_;
+			void*				data_;
+			u32					cursor_;
 		};
 
 		class outgoing_message
 		{
 		public:
-			inline			 outgoing_message() : data_(0), cursor_(0) {}
+			inline			 outgoing_message() {}
+							 outgoing_message(const outgoing_message&);
 			inline			~outgoing_message() {}
 
-			u32				current_size() const;
-			u32				maximum_size() const;
+			u32				cursor() const;
+			u32				size() const;
+
 			bool			can_write(u32 num_bytes) const;		// Check if we still can write N number of bytes
 
 			void			write(bool);
-			void			write(u8 );
-			void			write(s8 );
-			void			write(u16);
-			void			write(s16);
-			void			write(u32);
-			void			write(s32);
-			void			write(u64);
-			void			write(s64);
-			void			write(f32);
-			void			write(f64);
-			void			write(const char*);
+			void			write(u8  );
+			void			write(s8  );
+			void			write(u16 );
+			void			write(s16 );
+			void			write(u32 );
+			void			write(s32 );
+			void			write(u64 );
+			void			write(s64 );
+			void			write(f32 );
+			void			write(f64 );
+
+			void			write_data(const xbyte*, u32);
+			void			write_string(const char*, u32);
 
 			void			release();
 
-		protected:
-			inline			 outgoing_message(const outgoing_message&) : data_(0), cursor_(0) {}
+		protected:			
+			message_header	header_;
+			message_data	data_;
+		};
+
+		class incoming_message;
+
+		class incoming_messages
+		{
+		public:
+			virtual bool				is_empty() const = 0;
 			
-			void*			data_;
-			u32				cursor_;
+			virtual incoming_message	allocate() = 0;
+			virtual incoming_message	dequeue() = 0;
 		};
 
 		class incoming_message
 		{
 		public:
-			inline			 incoming_message() : data_(0), cursor_(0) {}
-			inline			~incoming_message() {}
+			inline				 incoming_message() {}
+								 incoming_message(const incoming_message&);
+			inline				~incoming_message() {}
 
-			bool			is_empty() const;
-			message_type	type() const;
-			message_event	event() const;
+			message_header 		header() const;
 
-			bool			is_from(ipeer*) const;
-			peerid			from() const;
+			bool				is_empty() const;
 
-			u32				read_size() const;
-			u32				total_size() const;
-			bool			can_read(u32 number_of_bytes) const;		// check if we still can read n number of bytes
+			u32					cursor() const;
+			u32					size() const;
 
-			bool			read(bool&) const;
-			bool			read(u8 &) const;
-			bool			read(s8 &) const;
-			bool			read(u16&) const;
-			bool			read(s16&) const;
-			bool			read(u32&) const;
-			bool			read(s32&) const;
-			bool			read(u64&) const;
-			bool			read(s64&) const;
-			bool			read(f32&) const;
-			bool			read(f64&) const;
+			bool				can_read(u32 number_of_bytes) const;		// check if we still can read n number of bytes
 
-			bool			read_string(const char* str, u32 maxstrlen, u32& strlen);
+			bool				read(bool&) const;
+			bool				read(u8  &) const;
+			bool				read(s8  &) const;
+			bool				read(u16 &) const;
+			bool				read(s16 &) const;
+			bool				read(u32 &) const;
+			bool				read(s32 &) const;
+			bool				read(u64 &) const;
+			bool				read(s64 &) const;
+			bool				read(f32 &) const;
+			bool				read(f64 &) const;
 
-			bool			next(incoming_message& previous);
-			void			release();
+			bool				read_data(xbyte* data, u32 size, u32& written);
+			bool				read_string(char* str, u32 maxstrlen, u32& strlen);
+
+			void				release();
 
 		protected:
-			inline			 incoming_message(const incoming_message&) : data_(0), cursor_(0) {}
-
-			void*			data_;
-			u32				cursor_;
+			message_header		header_;
+			message_data		data_;
 		};
 	}
 }

@@ -20,7 +20,7 @@ namespace xcore
 		class iallocator;
 		class ipeer;
 		class outgoing_message;
-		class incoming_message;
+		class incoming_messages;
 
 		class node
 		{
@@ -39,9 +39,10 @@ namespace xcore
 
 			u32					connections(ipeer** _out_peers, u32 _in_max_peers);
 
-			bool				create_message(outgoing_message&, ipeer* to, u32 size);
+			bool				send(outgoing_message*);
 
-			bool				process(incoming_message&, u32 _ms_to_wait=0);
+			void				event_wakeup();
+			bool				event_loop(incoming_messages&, u32 _ms_to_wait = 0);
 
 		protected:
 			iallocator*			allocator_;

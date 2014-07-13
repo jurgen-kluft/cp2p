@@ -2,7 +2,7 @@
 #include "xbase/x_bit_field.h"
 
 #include "xp2p/private/x_netio.h"
-#include "xp2p/private/x_netmsg.h"
+#include "xp2p/private/x_netio_rw.h"
 #include "xp2p/private/x_allocator.h"
 
 #undef UNICODE                  // Use ANSI WinAPI functions
@@ -146,6 +146,15 @@ namespace xcore
 #endif
 		};
 
+		static s32 ns_is_error(s32 n)
+		{
+			return n == 0 || (n < 0 && errno != EINTR && errno != EINPROGRESS && errno != EAGAIN && errno != EWOULDBLOCK
+#ifdef _WIN32
+				&& WSAGetLastError() != WSAEINTR && WSAGetLastError() != WSAEWOULDBLOCK
+#endif
+				);
+		}
+
 
 		struct ns_server
 		{
@@ -154,6 +163,7 @@ namespace xcore
 				, listening_sock()
 				, callback(NULL)
 				, allocator(NULL)
+				, protocol(NULL)
 				, num_active_connections(0)
 			{
 			}
@@ -163,7 +173,7 @@ namespace xcore
 			ns_callback_t		callback;
 			ns_socket_t			ctl[2];
 			ns_allocator *		allocator;
-			ns_allocator *		msg_allocator;
+			io_protocol *		protocol;
 
 			s32					num_active_connections;
 			ns_connection*		active_connections[NS_SERVER_MAX_CONNECTIONS];
@@ -171,14 +181,13 @@ namespace xcore
 			XCORE_CLASS_PLACEMENT_NEW_DELETE
 		};
 
-		struct ns_connection
+		class ns_connection : public io_writer, public io_reader
 		{
+		public:
 			inline				ns_connection()
 				: server(NULL)
 				, connection_data(NULL)
 				, last_io_time(0)
-				, incoming_message_(NULL)
-				, outgoing_messages_(NULL)
 				, flags(0)
 			{
 				memset(&sa, 0, sizeof(socket_address));
@@ -187,23 +196,62 @@ namespace xcore
 			ns_server*				server;
 			ns_socket_t				sock;
 			socket_address			sa;
-			
-			u32						connection_id;		// peer-id
+
+			io_protocol::connection_t conn;			
 			void*					connection_data;
 			
 			time_t					last_io_time;
 			
-			ns_message_io_state		header_io_state_;
-			ns_message_header		header_;
-			ns_message*				incoming_message_;
-
-			ns_message*				outgoing_messages_;
-
 			u32						flags;
+
+			virtual s32				read(io_buffer& iobuf)
+			{
+				s32 bytes_read = 0;
+				
+				s32 n;
+				while ((n = recv(sock.s, (char*)(iobuf.data + bytes_read), iobuf.size - bytes_read, 0)) > 0)
+				{
+					bytes_read += n;
+					if (bytes_read == iobuf.size)
+						break;
+				}
+
+				if (ns_is_error(n))
+				{
+					flags |= NSF_CLOSE_IMMEDIATELY;
+					return -1;
+				}
+				else
+				{
+					return bytes_read;
+				}
+			}
+
+			virtual s32				write(io_buffer& iobuf)
+			{
+				s32 bytes_written = 0;
+
+				s32 n;
+				while ((n = send(sock.s, (const char*)(iobuf.data + bytes_written), iobuf.size - bytes_written, 0)) > 0)
+				{
+					bytes_written += n;
+					if (bytes_written == iobuf.size)
+						break;
+				}
+
+				if (ns_is_error(n))
+				{
+					flags |= NSF_CLOSE_IMMEDIATELY;
+					return -1;
+				}
+				else
+				{
+					return bytes_written;
+				}
+			}
 
 			XCORE_CLASS_PLACEMENT_NEW_DELETE
 		};
-
 
 		struct ctl_msg 
 		{
@@ -223,7 +271,7 @@ namespace xcore
 			
 			// Sorted Insert
 			s32 i = 0;
-			while ((c->connection_id < server->active_connections[i]->connection_id) && (i < server->num_active_connections))
+			while ((c < server->active_connections[i]) && (i < server->num_active_connections))
 				++i;
 
 			s32 e = (n+1) - i;
@@ -234,6 +282,8 @@ namespace xcore
 			}
 			server->active_connections[i] = c;
 			server->num_active_connections++;
+
+			c->conn = server->protocol->open(c);
 		}
 
 		static void ns_remove_conn(ns_server *server, u32 ci) 
@@ -260,19 +310,6 @@ namespace xcore
 			}
 			return -1;
 		}
-
-		static ns_connection * ns_find_connection_by_id(ns_server * server, u32 id)
-		{
-			s32 const n = server->num_active_connections;
-			for (s32 i=0; i<n; i++)
-			{
-				if (server->active_connections[i]->connection_id = id)
-				{
-					return server->active_connections[i];
-				}
-			}
-			return NULL;
-		}
 				
 		static void ns_call(ns_connection * conn, ns_event ev, void *p) 
 		{
@@ -284,11 +321,7 @@ namespace xcore
 			DBG(("%p %d", conn, conn->flags));
 			ns_connection * conn = server->active_connections[conn_index];
 			ns_call(conn, NS_EVENT_CLOSE, NULL);
-			while (conn->outgoing_messages_ != NULL)
-			{
-				ns_message * msg = ns_message_dequeue(conn->outgoing_messages_);
-				ns_message_dealloc(msg);
-			}
+			server->protocol->close(conn->conn);
 			ns_remove_conn(server, conn_index);
 			closesocket(conn->sock.s);
 			NS_FREE(conn);
@@ -520,15 +553,6 @@ namespace xcore
 			return c;
 		}
 
-		static s32 ns_is_error(s32 n) 
-		{
-			return n == 0 || (n < 0 && errno != EINTR && errno != EINPROGRESS && errno != EAGAIN && errno != EWOULDBLOCK 
-#ifdef _WIN32
-				&& WSAGetLastError() != WSAEINTR && WSAGetLastError() != WSAEWOULDBLOCK
-#endif
-				);
-		}
-
 		void ns_sock_to_str(sock_t sock, char *buf, u32 len, s32 flags) 
 		{
 			union socket_address sa;
@@ -593,7 +617,7 @@ namespace xcore
 			return n;
 		}
 
-		static int ns_read_from_socket(ns_allocator * _allocator, ns_connection * _conn) 
+		static int ns_read_from_socket(ns_server * _server, ns_connection * _conn) 
 		{
 			int result = 0;
 
@@ -617,112 +641,15 @@ namespace xcore
 			}
 			else
 			{
-				if (_conn->header_io_state_.length_ < sizeof(ns_message_header))
-				{
-					// Start a new message
-					s32 n = 0;
-					char* rcv_buf = (char*)&_conn->header_;
-					while ((n = recv(_conn->sock.s, rcv_buf + _conn->header_io_state_.length_, sizeof(ns_message_header) - _conn->header_io_state_.length_, 0)) > 0) 
-					{
-						_conn->header_io_state_.length_ += n;
-						if (_conn->header_io_state_.length_ == sizeof(ns_message_header))
-							break;
-					}
-
-					if (ns_is_error(n))
-					{
-						_conn->header_io_state_.length_ = 0;
-						_conn->flags |= NSF_CLOSE_IMMEDIATELY;
-						result = -1;
-					}
-					else
-					{
-						// Yield when we haven't received a full header
-						if (_conn->header_io_state_.length_ != 0)
-							return 0;
-
-						// Validate the message header, if it is invalid
-						// then terminate this connection.
-						if (!_conn->header_.is_valid())
-						{
-							// Protocol violation
-							_conn->flags |= NSF_CLOSE_IMMEDIATELY;
-							result = -1;
-						}
-						else
-						{
-							// Allocate a message to receive the payload
-							ns_message_system system;
-							_conn->incoming_message_ = ns_message_alloc(_allocator, NS_MSG_TYPE_DATA, _conn->header_.length_);
-						}
-					}
-				}
-				else
-				{
-					if (_conn->incoming_message_ == NULL)
-					{
-						ns_message_system system;
-						_conn->incoming_message_ = ns_message_alloc(_allocator, NS_MSG_TYPE_DATA, _conn->header_.length_);
-					}
-				}
-
-				if (_conn->incoming_message_ != NULL)
-				{
-					s32 n = 0;
-					while ((n = recv(_conn->sock.s, (char*)(_conn->incoming_message_->payload()) + _conn->incoming_message_->io_state_.length_, _conn->incoming_message_->header_.length_ - _conn->incoming_message_->io_state_.length_, 0)) > 0) 
-					{
-						DBG(("%p %d <- %d bytes (PLAIN)", _conn, _conn->flags, n));
-						_conn->incoming_message_->io_state_.length_ += n;
-						if (_conn->incoming_message_->io_state_.length_ == _conn->incoming_message_->header_.length_)
-						{
-							// We have received a full message
-							// Start to receive a new header
-							_conn->header_io_state_.length_ = 0;
-							return 1;
-						}
-					}
-
-					if (ns_is_error(n))
-					{
-						ns_message_dealloc(_conn->incoming_message_);
-						_conn->incoming_message_ = NULL;
-						_conn->flags |= NSF_CLOSE_IMMEDIATELY;
-						result = -1;
-					}
-				}
+				result = _server->protocol->read(_conn->conn, _conn);
 			}
 			return result;
 		}
 
-		static int ns_write_to_socket(ns_connection * _conn) 
+		static int ns_write_to_socket(ns_server * _server, ns_connection * _conn)
 		{
-			s32 result = 0;
-			ns_message * msg = _conn->outgoing_messages_;
-			if (msg == NULL)
-				return result;
-
-			u32 s = msg->header_.length_ + sizeof(ns_message_header) - msg->io_state_.length_;
-			s32 n = send(_conn->sock.s, (const char*)&msg->header_ + msg->io_state_.length_, s, 0); 
-
-			DBG(("%p %d -> %d bytes", conn, conn->flags, n));
-			if (ns_is_error(n)) 
-			{
-				_conn->flags |= NSF_CLOSE_IMMEDIATELY;
-				msg = NULL;
-				result = -1;
-			}
-			else 
-			{
-				// Did we send a full message ?
-				msg->io_state_.length_ += n;
-				if (msg->io_state_.length_ == msg->header_.length_) 
-				{
-					ns_call(_conn, NS_EVENT_SEND, msg);
-					ns_message_dequeue(_conn->outgoing_messages_);
-					ns_message_dealloc(msg);
-					result = 1;
-				}
-			}
+			s32 result = _server->protocol->write(_conn->conn, _conn);
+			DBG(("%p %d -> %d bytes", conn, conn->flags, result));
 			return result;
 		}
 
@@ -738,7 +665,7 @@ namespace xcore
 			}
 		}
 
-		s32 ns_server_poll(ns_server * server, ns_message *& _out_rcvd_messages, s32 milli) 
+		s32 ns_server_poll(ns_server * server, s32 milli) 
 		{
 			if (!server->listening_sock.is_valid() || server->num_active_connections == 0) 
 				return 0;
@@ -755,15 +682,21 @@ namespace xcore
 			for (s32 i=0; i<server->num_active_connections; ++i) 
 			{
 				ns_connection* c = server->active_connections[i];
-				xbfSet(c->flags, NSF_WANT_READ);
 
 				if (xbfIsSet(c->flags, NSF_CONNECTING))
 				{
 					xbfSet(c->flags, NSF_WANT_WRITE);
 				}
-				else if (c->outgoing_messages_!=NULL)
+				else
 				{
-					xbfSet(c->flags, NSF_WANT_WRITE);
+					if (server->protocol->needs_read(c->conn))
+					{
+						xbfSet(c->flags, NSF_WANT_READ);
+					}
+					if (server->protocol->needs_write(c->conn))
+					{
+						xbfSet(c->flags, NSF_WANT_WRITE);
+					}
 				}
 			}
 
@@ -866,12 +799,7 @@ namespace xcore
 						if (FD_ISSET(conn->sock.s, &read_set)) 
 						{
 							conn->last_io_time = current_time;
-							while (ns_read_from_socket(server->msg_allocator, conn) == 1)
-							{
-								ns_message* incoming_msg = conn->incoming_message_;
-								conn->incoming_message_ = NULL;
-								ns_message_enqueue(_out_rcvd_messages, incoming_msg);
-							}
+							ns_read_from_socket(server, conn);
 						}
 
 						if (FD_ISSET(conn->sock.s, &write_set))
@@ -885,11 +813,7 @@ namespace xcore
 							} 
 
 							conn->last_io_time = current_time;
-
-							// Write as many messages to the socket
-							while (ns_write_to_socket(conn)==1)
-							{
-							}
+							ns_write_to_socket(server, conn);
 						}
 					}
 				}
@@ -963,11 +887,6 @@ namespace xcore
 			return conn;
 		}
 
-		void			ns_send(ns_connection * conn, ns_message * msg)
-		{
-			ns_message_enqueue(conn->outgoing_messages_, msg);
-		}
-
 		ns_connection * ns_add_sock(ns_server *s, ns_socket_t sock, void *p) 
 		{
 			ns_connection *conn;
@@ -1011,12 +930,12 @@ namespace xcore
 			ns_server_wakeup_ex(server, NULL, (void *) "", 0);
 		}
 
-		void ns_server_init(ns_allocator * _allocator, ns_server *& server, ns_allocator * msg_allocator, void * server_data, ns_callback_t cb) 
+		void ns_server_init(ns_allocator * _allocator, ns_server *& server, io_protocol * protocol, void * server_data, ns_callback_t cb) 
 		{
 			void * ip_mem = _allocator->alloc(sizeof(ns_server), sizeof(void*));
 			server = new (ip_mem) ns_server();
 			server->allocator = _allocator;
-			server->msg_allocator = msg_allocator;
+			server->protocol = protocol;
 
 			server->listening_sock.clear();
 			server->ctl[0].clear();
@@ -1040,15 +959,7 @@ namespace xcore
 				return;
 
 			// Do one last poll, see https://github.com/cesanta/mongoose/issues/286
-			ns_message * incoming_messages = NULL;
-			ns_server_poll(s, incoming_messages, 0);
-
-			// Release all incoming messages
-			while (incoming_messages != NULL)
-			{
-				ns_message * msg = ns_message_dequeue(incoming_messages);
-				ns_message_dealloc(msg);
-			}
+			ns_server_poll(s, 0);
 
 			ns_close_sock(s->listening_sock);
 			ns_close_sock(s->ctl[0]);
