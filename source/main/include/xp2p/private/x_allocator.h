@@ -17,8 +17,8 @@ namespace xcore
 		class iallocator
 		{
 		public:
-			virtual void*	alloc(u32 _size, u32 _alignment) = 0;
-			virtual void	dealloc(void* _in_oldmem) = 0;
+			virtual void*	allocate(u32 _size, u32 _alignment) = 0;
+			virtual void	deallocate(void* _in_oldmem) = 0;
 		};
 	}
 }

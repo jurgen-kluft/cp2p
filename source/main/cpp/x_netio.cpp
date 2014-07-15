@@ -2,7 +2,7 @@
 #include "xbase/x_bit_field.h"
 
 #include "xp2p/private/x_netio.h"
-#include "xp2p/private/x_netio_rw.h"
+#include "xp2p/private/x_netio_proto.h"
 #include "xp2p/private/x_allocator.h"
 
 #undef UNICODE                  // Use ANSI WinAPI functions
@@ -35,7 +35,7 @@
 //#include <signal.h>
 
 #ifdef _MSC_VER
-#pragma comment(lib, "ws2_32.lib")    // Linking with winsock library
+#pragma comment(lib, "ws2_32.lib")    // Linking with windows socket library
 #endif
 
 #include <windows.h>

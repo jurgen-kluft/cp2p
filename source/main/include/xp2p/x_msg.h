@@ -8,6 +8,8 @@
 #pragma once 
 #endif
 
+#include "xbase\x_allocator.h"
+
 namespace xcore
 {
 	// ==============================================================================================================================
@@ -17,101 +19,36 @@ namespace xcore
 	{
 		class ipeer;
 
-		class message_allocator
+		class message_block
 		{
 		public:
-			virtual void*		allocate(u32 size, u32 alignment) = 0;
-			virtual void		deallocate(void*) = 0;
-		};
+			inline				message_block() : flags_(0), size_(0), data_(NULL), const_data_(NULL) {}
+			inline				message_block(void* _data, u32 _size) : flags_(0), size_(_size), data_(_data), const_data_(NULL) {}
+			inline				message_block(void const* _data, u32 _size) : flags_(0), size_(_size), data_(NULL), const_data_(_data) {}
 
-		struct message_header
-		{
-			inline				message_header() : flags_(0), from_(0), to_(0) {}
-			inline				message_header(u32 _flags, peerid _from, peerid _to) : flags_(_flags), from_(_from), to_(_to) {}
+			u32					get_flags() const;
+			void				set_flags(u32 _flags);
 
-			bool				is_event() const;
-			bool				is_data() const;
+			u32					get_size() const;
+			const void*			get_data() const;
 
-			bool				is_connected() const;
-			bool				is_not_connected() const;
-			bool				cannot_connect() const;
+			XCORE_CLASS_PLACEMENT_NEW_DELETE
 
-			bool				is_from(peerid) const;
+		protected:
 
-		private:
 			u32					flags_;
-			peerid				from_;
-			peerid				to_;
-		};
-
-		struct message_data
-		{
-			inline				message_data() : data_(NULL), size_(0), cursor_(0) {}
-
 			u32					size_;
-			message_allocator*	allocator_;
 			void*				data_;
-			u32					cursor_;
+			void const*			const_data_;
 		};
 
-		class outgoing_message
+		class message_reader
 		{
 		public:
-			inline			 outgoing_message() {}
-							 outgoing_message(const outgoing_message&);
-			inline			~outgoing_message() {}
+			inline				message_reader(message_block* _block) : cursor_(0), block_(_block) {}
 
-			u32				cursor() const;
-			u32				size() const;
-
-			bool			can_write(u32 num_bytes) const;		// Check if we still can write N number of bytes
-
-			void			write(bool);
-			void			write(u8  );
-			void			write(s8  );
-			void			write(u16 );
-			void			write(s16 );
-			void			write(u32 );
-			void			write(s32 );
-			void			write(u64 );
-			void			write(s64 );
-			void			write(f32 );
-			void			write(f64 );
-
-			void			write_data(const xbyte*, u32);
-			void			write_string(const char*, u32);
-
-			void			release();
-
-		protected:			
-			message_header	header_;
-			message_data	data_;
-		};
-
-		class incoming_message;
-
-		class incoming_messages
-		{
-		public:
-			virtual bool				is_empty() const = 0;
-			
-			virtual incoming_message	allocate() = 0;
-			virtual incoming_message	dequeue() = 0;
-		};
-
-		class incoming_message
-		{
-		public:
-			inline				 incoming_message() {}
-								 incoming_message(const incoming_message&);
-			inline				~incoming_message() {}
-
-			message_header 		header() const;
-
-			bool				is_empty() const;
-
+			void				set_cursor(u32);
 			u32					cursor() const;
-			u32					size() const;
 
 			bool				can_read(u32 number_of_bytes) const;		// check if we still can read n number of bytes
 
@@ -126,16 +63,151 @@ namespace xcore
 			bool				read(s64 &) const;
 			bool				read(f32 &) const;
 			bool				read(f64 &) const;
-
+			
 			bool				read_data(xbyte* data, u32 size, u32& written);
 			bool				read_string(char* str, u32 maxstrlen, u32& strlen);
+
+		protected:
+			u32					cursor_;
+			xbyte const*		data_;
+			message_block*		block_;
+		};
+
+		class message_writer
+		{
+		public:
+			inline				message_writer(message_block* _block) : cursor_(0), block_(_block) {}
+
+			void				set_cursor(u32);
+			u32					cursor() const;
+
+			bool				can_write(u32 num_bytes = 0) const;
+
+			void				write(bool);
+			void				write(u8  );
+			void				write(s8  );
+			void				write(u16 );
+			void				write(s16 );
+			void				write(u32 );
+			void				write(s32 );
+			void				write(u64 );
+			void				write(s64 );
+			void				write(f32 );
+			void				write(f64 );
+
+			void				write_data(const xbyte*, u32);
+			void				write_string(const char*);
+
+		protected:
+			u32					cursor_;
+			xbyte*				data_;
+			message_block*		block_;
+		};
+
+
+		class message
+		{
+		public:
+			inline				message(ipeer* _from, ipeer* _to, u32 _flags) : from_(_from), to_(_to), flags_(_flags), nblocks_(0), pblocks_(NULL) {}
+
+			bool				is_from(ipeer*) const;
+
+			u32					get_flags() const;
+
+			bool				has_event() const;
+			bool				has_data() const;
+
+			bool				event_is_connected() const;
+			bool				event_disconnected() const;
+			bool				event_cannot_connect() const;
+
+			void				add_block(message_block* _block);
+
+			XCORE_CLASS_PLACEMENT_NEW_DELETE
+
+		protected:
+			ipeer*				from_;
+			ipeer*				to_;
+			u32					flags_;
+			u32					nblocks_;
+			message_block*		pblocks_;
+		};
+
+		class outgoing_message
+		{
+		public:
+			inline				 outgoing_message() : message_(NULL) {}
+			inline				 outgoing_message(message* _message) : message_(_message) {}
+								 outgoing_message(const outgoing_message&);
+			inline				~outgoing_message() {}
+
+			u32					num_blocks() const;
+			void				add_block(message_block*);
+			message_writer		get_writer(u32 _block_index=0) const;
+			
+			void				release(imessage_allocator*);
+
+		protected:
+			message*			message_;
+		};
+
+
+		class incoming_message
+		{
+		public:
+			inline				 incoming_message() : message_(NULL) {}
+			inline				 incoming_message(message* _message) : message_(_message) {}
+								 incoming_message(const incoming_message&);
+			inline				~incoming_message() {}
+
+			bool				is_from(ipeer*) const;
+			ipeer*				from();
+
+			bool				has_event() const;
+			bool				has_data() const;
+
+			bool				event_is_connected() const;
+			bool				event_disconnected() const;
+			bool				event_cannot_connect() const;
+
+			u32					num_blocks() const;
+			message_reader		get_reader(u32 _index=0) const;
 
 			void				release();
 
 		protected:
-			message_header		header_;
-			message_data		data_;
+			message*			message_;
 		};
+
+		class imessage_allocator
+		{
+		public:
+			virtual message*		allocate(ipeer* _from, ipeer* _to, u32 _flags) = 0;
+			virtual void			deallocate(message*) = 0;
+
+			virtual message_block*	allocate(u32 _flags, u32 _size) = 0;
+			virtual void			deallocate(message_block*) = 0;
+		};
+
+		class incoming_messages
+		{
+		public:
+			virtual bool			dequeue(incoming_message&) = 0;
+
+		protected:
+			virtual					~incoming_messages() {}
+		};
+
+		class outgoing_messages
+		{
+		public:
+			virtual bool			enqueue(outgoing_message&) = 0;
+			virtual bool			dequeue(outgoing_message&) = 0;
+
+		protected:
+			virtual					~outgoing_messages() {}
+		};
+
 	}
 }
 
