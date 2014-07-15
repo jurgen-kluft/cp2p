@@ -29,7 +29,7 @@ namespace xcore
 			virtual netip4		get_ip4() const = 0;
 			virtual peerid		get_id() const = 0;
 
-		private:
+		protected:
 			virtual				~ipeer() {}
 		};
 

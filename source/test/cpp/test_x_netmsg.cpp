@@ -1,5 +1,5 @@
 #include "xp2p\private\x_netio.h"
-#include "xp2p\private\x_netmsg.h"
+#include "xp2p\private\x_netio_proto.h"
 
 #include "xbase\x_allocator.h"
 #include "xunittest\xunittest.h"
@@ -38,57 +38,14 @@ UNITTEST_SUITE_BEGIN(x_netmsg)
 
 		UNITTEST_TEST(alloc_dealloc)
 		{
-			xnetio::ns_message * m1 = xnetio::ns_message_alloc(ns_allocator, xnetio::NS_MSG_TYPE_EVENT_CONNECTED, 4);
-
-			xnetio::ns_message_dealloc(m1);
 		}
 
 		UNITTEST_TEST(enqueue)
 		{
-			xnetio::ns_message * m1 = xnetio::ns_message_alloc(ns_allocator, xnetio::NS_MSG_TYPE_EVENT_CONNECTED, 4);
-			xnetio::ns_message * m2 = xnetio::ns_message_alloc(ns_allocator, xnetio::NS_MSG_TYPE_EVENT_CONNECTED, 4);
-			xnetio::ns_message * m3 = xnetio::ns_message_alloc(ns_allocator, xnetio::NS_MSG_TYPE_EVENT_CONNECTED, 4);
-
-			xnetio::ns_message * queue = NULL;
-			ns_message_enqueue(queue, m1);
-			CHECK_EQUAL(queue, m1);
-			ns_message_enqueue(queue, m2);
-			CHECK_EQUAL(queue, m2);
-			ns_message_enqueue(queue, m3);
-			CHECK_EQUAL(queue, m3);
-
-			xnetio::ns_message_dealloc(m1);
-			xnetio::ns_message_dealloc(m2);
-			xnetio::ns_message_dealloc(m3);
 		}
 
 		UNITTEST_TEST(dequeue)
 		{
-			xnetio::ns_message * m1 = xnetio::ns_message_alloc(ns_allocator, xnetio::NS_MSG_TYPE_EVENT_CONNECTED, 4);
-			xnetio::ns_message * m2 = xnetio::ns_message_alloc(ns_allocator, xnetio::NS_MSG_TYPE_EVENT_CONNECTED, 4);
-			xnetio::ns_message * m3 = xnetio::ns_message_alloc(ns_allocator, xnetio::NS_MSG_TYPE_EVENT_CONNECTED, 4);
-
-			xnetio::ns_message * queue = NULL;
-			ns_message_enqueue(queue, m1);
-			CHECK_EQUAL(queue, m1);
-			ns_message_enqueue(queue, m2);
-			CHECK_EQUAL(queue, m2);
-			ns_message_enqueue(queue, m3);
-			CHECK_EQUAL(queue, m3);
-
-			xnetio::ns_message * d1 = ns_message_dequeue(queue); 
-			CHECK_EQUAL(queue, m3);
-			CHECK_EQUAL(d1, m1);
-			xnetio::ns_message * d2 = ns_message_dequeue(queue); 
-			CHECK_EQUAL(queue, m3);
-			CHECK_EQUAL(d2, m2);
-			xnetio::ns_message * d3 = ns_message_dequeue(queue); 
-			CHECK_EQUAL(queue, (xnetio::ns_message *)NULL);
-			CHECK_EQUAL(d3, m3);
-
-			xnetio::ns_message_dealloc(m1);
-			xnetio::ns_message_dealloc(m2);
-			xnetio::ns_message_dealloc(m3);
 		}
 	}
 }

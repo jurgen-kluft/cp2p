@@ -21,17 +21,24 @@ namespace xcore
 		{
 		}
 
+		enum emessage_flags
+		{
+			MSG_FLAG_ANNOUNCE = 1,
+			MSG_FLAG_SYMPHONY = 2,
+			MSG_FLAG_CHUNK = 4,
+		};
+
 
 		class MyAllocator : public iallocator
 		{
 		public:
 								MyAllocator(x_iallocator* inSystemAllocator) : mSystemAllocator(inSystemAllocator) {}
 
-			virtual void*		alloc(u32 inSize, u32 inAlignment)
+			virtual void*		allocate(u32 inSize, u32 inAlignment)
 			{
 				return mOurAllocator->allocate(inSize, inAlignment);
 			}
-			virtual void		dealloc(void* inOldMem)
+			virtual void		deallocate(void* inOldMem)
 			{
 				mOurAllocator->deallocate(inOldMem);
 			}
@@ -56,70 +63,215 @@ namespace xcore
 			x_iallocator*	mOurAllocator;
 		};
 
+
+		class MyMessageAllocator : public imessage_allocator
+		{
+		public:
+								MyMessageAllocator(x_iallocator* inSystemAllocator) : mSystemAllocator(inSystemAllocator) {}
+
+
+			virtual message*	allocate(ipeer* _from, ipeer* _to, u32 _flags)
+			{
+				void* mem = mOurAllocator->allocate(sizeof(message), sizeof(void*));
+				message* msg = new (mem) message(_from, _to, _flags);
+				return msg;
+			}
+
+			virtual void			deallocate(message* _msg)
+			{
+				mOurAllocator->deallocate(_msg);
+			}
+
+			virtual message_block*	allocate(u32 _flags, u32 _size)
+			{
+				void* message_mem = mOurAllocator->allocate(_size, sizeof(void*));
+				void* block_mem = mOurAllocator->allocate(sizeof(message_block), sizeof(void*));
+				message_block* msg_block = new (block_mem) message_block(message_mem, _size);
+				msg_block->set_flags(_flags);
+				return msg_block;
+			}
+
+			virtual void			deallocate(message_block* _msg_block)
+			{
+				mOurAllocator->deallocate(_msg_block);
+			}
+
+			outgoing_message		allocate(ipeer* _from, ipeer* _to, u32 _flags, u32 _size)
+			{
+				message* message = allocate(_from, _to, _flags);
+				message_block* block = allocate(_flags, _size);
+				message->add_block(block);
+				return outgoing_message(message);
+			}
+
+			static MyMessageAllocator*	sCreate(x_iallocator* inSystemAllocator, u32 memsize)
+			{
+				// Create a heap allocator or any other type of allocator
+				return NULL;
+			}
+
+			static void					sRelease(MyMessageAllocator*& allocator)
+			{
+				// Should we call the destructor of our allocator?
+				allocator->mSystemAllocator->deallocate(allocator->mOurAllocator);
+				allocator = NULL;
+			}
+
+		private:
+							~MyMessageAllocator() { }
+
+			x_iallocator*	mSystemAllocator;
+			x_iallocator*	mOurAllocator;
+		};
+
+
+
 		static void ExampleUseCase(x_iallocator* inSystemAllocator)
 		{
 			MyAllocator* ourSystemAllocator = MyAllocator::sCreate(inSystemAllocator, 2 * 1024 * 1024);
-			
-			xp2p::node system(ourSystemAllocator);
-			xp2p::node* node = &system;
-			ipeer* host = node->start(netip4().port(51888));
+			MyMessageAllocator* ourMessageAllocator = MyMessageAllocator::sCreate(inSystemAllocator, 24 * 1024 * 1024);
 
-			// Let's connect to the tracker
-			ipeer* remote_peer = node->register_peer(peerid(0), netip4(10, 0, 8, 12).port(51888));
-			node->connect_to(remote_peer);
+			bool start_as_peer = true;
 
-			incoming_messages rcvd_messages;
-			while (remote_peer != NULL)
+			if (start_as_peer)
 			{
-				if (node->event_loop(rcvd_messages, 1000))	// Wait a maximum of 1000 ms
-				{
-					while (!rcvd_messages.is_empty())
-					{
-						incoming_message rmsg = rcvd_messages.dequeue();
+				xp2p::node system(ourSystemAllocator, ourMessageAllocator);
+				xp2p::node* node = &system;
+				ipeer* host = node->start(netip4().port(51888));
 
-						if (rmsg.header().is_from(remote_peer->get_id()))
+				// Let's connect to the tracker which always has peerid '0'
+				ipeer* tracker = node->register_peer(peerid(0), netip4(10, 0, 8, 12).port(51888));
+				node->connect_to(tracker);
+
+				incoming_messages* rcvd_messages;
+				outgoing_messages* sent_messages;
+				while (tracker != NULL)
+				{
+					if (node->event_loop(rcvd_messages, sent_messages, 1000))	// Wait a maximum of 1000 ms
+					{
+						incoming_message rmsg;
+						while (!rcvd_messages->dequeue(rmsg))
 						{
-							if (rmsg.header().is_event())
+							if (rmsg.is_from(tracker))
 							{
-								if (rmsg.header().is_connected())
+								if (rmsg.has_event())
 								{
-									outgoing_message tmsg;
-									node->create_message(tmsg, remote_peer, 40);
-									tmsg.write("Hello remote peer, how are you?");
+									if (rmsg.event_is_connected())
+									{
+										outgoing_message tmsg = ourMessageAllocator->allocate(tracker, rmsg.from(), 0, 40);
+										message_writer writer = tmsg.get_writer();
+										writer.write_string("Hello tracker, how are you?");
+									}
+									else if (rmsg.event_disconnected())
+									{
+										// Remote peer has disconnected or cannot connect
+										break;
+									}
 								}
-								else if (rmsg.header().is_not_connected())
+								else if (rmsg.has_data())
+								{
+									message_reader reader = rmsg.get_reader();
+
+									char ip4_str[32];
+									tracker->get_ip4().to_string(ip4_str, sizeof(ip4_str));
+
+									char msgString[256];
+									u32 msgStringLen;
+									reader.read_string(msgString, sizeof(msgString), msgStringLen);
+									x_printf("info: message \"%s\"received from tracker \"%s\"", x_va_list(x_va((const char*)msgString), x_va(ip4_str)));
+								}
+							}
+							else
+							{
+								//break;
+							}
+						}
+
+						// release all messages that where sent
+						outgoing_message smsg;
+						while (!sent_messages->dequeue(smsg))
+						{
+							smsg.release(ourMessageAllocator);
+						}
+					}
+				}
+
+				// Clear all pointers
+				tracker = NULL;
+
+				// Stop all threads, close all sockets, release all resources
+				node->stop();
+
+				// Release our allocators and their memory back to the system allocator
+				MyAllocator::sRelease(ourSystemAllocator);
+			}
+			else
+			{
+				// Start as Tracker
+				xp2p::node system(ourSystemAllocator, ourMessageAllocator);
+				xp2p::node* node = &system;
+
+				// Let's boot as a tracker which always has peerid '0'
+				ipeer* tracker = node->start(netip4().port(51888));
+
+				incoming_messages* rcvd_messages;
+				outgoing_messages* sent_messages;
+				while (tracker != NULL)
+				{
+					if (node->event_loop(rcvd_messages, sent_messages, 1000))	// Wait a maximum of 1000 ms
+					{
+						incoming_message rmsg;
+						while (!rcvd_messages->dequeue(rmsg))
+						{
+							ipeer* peer = rmsg.from();
+							if (rmsg.has_event())
+							{
+								if (rmsg.event_is_connected())
+								{
+									// Remote peer has connected
+								}
+								else if (rmsg.event_disconnected())
 								{
 									// Remote peer has disconnected or cannot connect
 									break;
 								}
 							}
-							else if (rmsg.header().is_data())
+							else if (rmsg.has_data())
 							{
+								message_reader reader = rmsg.get_reader();
 								char ip4_str[32];
-								remote_peer->get_ip4().to_string(ip4_str, sizeof(ip4_str));
+								peer->get_ip4().to_string(ip4_str, sizeof(ip4_str));
 
 								char msgString[256];
 								u32 msgStringLen;
-								rmsg.read_string(msgString, sizeof(msgString), msgStringLen);
-								x_printf("info: message \"%s\"received from Peer \"%s\"", x_va_list(x_va((const char*)msgString), x_va(ip4_str)));
+								reader.read_string(msgString, sizeof(msgString), msgStringLen);
+								x_printf("info: message \"%s\"received from peer \"%s\"", x_va_list(x_va((const char*)msgString), x_va(ip4_str)));
+
+								// Send back a message
+								outgoing_message tmsg = ourMessageAllocator->allocate(tracker, rmsg.from(), 0, 40);
+								message_writer writer = tmsg.get_writer();
+								writer.write_string("Hello peer, i am fine!");
 							}
 						}
-						else
-						{
-							//break;
-						}
+					}
+
+					// release all messages that where sent
+					outgoing_message smsg;
+					while (!sent_messages->dequeue(smsg))
+					{
+						smsg.release(ourMessageAllocator);
 					}
 				}
+
+				// Clear all pointers
+				tracker = NULL;
+
+				// Stop all threads, close all sockets, release all resources
+				node->stop();
+
+				// Release our allocators and their memory back to the system allocator
+				MyAllocator::sRelease(ourSystemAllocator);
 			}
-
-			// Clear all pointers
-			remote_peer = NULL;
-
-			// Stop all threads, close all sockets, release all resources
-			node->stop();
-
-			// Release our allocators and their memory back to the system allocator
-			MyAllocator::sRelease(ourSystemAllocator);
 		}
 	}
 }

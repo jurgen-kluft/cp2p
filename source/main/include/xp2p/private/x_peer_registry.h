@@ -14,21 +14,26 @@ namespace xcore
 {
 	namespace xp2p
 	{
-		class IAllocator;
-		class Dictionary;
-		extern Dictionary*			gCreateDictionary(IAllocator* allocator);
+		class iallocator;
+		
+		class ipeer;
+		class ipeer_registry;
+
+		extern ipeer_registry*		gCreatePeerRegistry(iallocator* allocator);
 
 		// "Peer <-> PeerID" Dictionary
-		class Dictionary
+		class ipeer_registry
 		{
 		public:
-			virtual IPeer*			RegisterPeer(PeerID, NetIP4) = 0;
-			virtual IPeer*			FindPeerByID(PeerID) const = 0;
+			virtual ipeer*			register_peer(peerid, netip4) = 0;
+			virtual bool			unregister_peer(peerid) = 0;
 
-			virtual bool			UnregisterPeer(PeerID) = 0;
+			virtual ipeer*			find_peer_by_id(peerid) const = 0;
+
+			virtual void			release() = 0;
 
 		protected:
-			virtual					~Dictionary() {}
+			virtual					~ipeer_registry() {}
 		};		
 
 	}
