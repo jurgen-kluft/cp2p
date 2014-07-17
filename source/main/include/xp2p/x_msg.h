@@ -9,6 +9,7 @@
 #endif
 
 #include "xbase\x_allocator.h"
+#include "xp2p\private\x_lqueue.h"
 
 namespace xcore
 {
@@ -18,24 +19,25 @@ namespace xcore
 	namespace xp2p
 	{
 		class ipeer;
+		class imessage_allocator;
 
-		class message_block
+		class message_block : public lqueue<message_block>
 		{
 		public:
-			inline				message_block() : flags_(0), size_(0), data_(NULL), const_data_(NULL) {}
-			inline				message_block(void* _data, u32 _size) : flags_(0), size_(_size), data_(_data), const_data_(NULL) {}
-			inline				message_block(void const* _data, u32 _size) : flags_(0), size_(_size), data_(NULL), const_data_(_data) {}
+			inline				message_block() : lqueue(this), flags_(0), size_(0), data_(NULL), const_data_(NULL) { }
+			inline				message_block(void* _data, u32 _size) : lqueue(this), flags_(0), size_(_size), data_(_data), const_data_(NULL) {}
+			inline				message_block(void const* _data, u32 _size) : lqueue(this), flags_(0), size_(_size), data_(NULL), const_data_(_data) {}
 
 			u32					get_flags() const;
 			void				set_flags(u32 _flags);
 
 			u32					get_size() const;
+			void*				get_data();
 			const void*			get_data() const;
 
 			XCORE_CLASS_PLACEMENT_NEW_DELETE
 
 		protected:
-
 			u32					flags_;
 			u32					size_;
 			void*				data_;
@@ -48,28 +50,29 @@ namespace xcore
 			inline				message_reader(message_block* _block) : cursor_(0), block_(_block) {}
 
 			void				set_cursor(u32);
-			u32					cursor() const;
+			u32					get_cursor() const;
 
 			bool				can_read(u32 number_of_bytes) const;		// check if we still can read n number of bytes
 
-			bool				read(bool&) const;
-			bool				read(u8  &) const;
-			bool				read(s8  &) const;
-			bool				read(u16 &) const;
-			bool				read(s16 &) const;
-			bool				read(u32 &) const;
-			bool				read(s32 &) const;
-			bool				read(u64 &) const;
-			bool				read(s64 &) const;
-			bool				read(f32 &) const;
-			bool				read(f64 &) const;
+			u32					read(bool&);
+			u32					read(u8  &);
+			u32					read(s8  &);
+			u32					read(u16 &);
+			u32					read(s16 &);
+			u32					read(u32 &);
+			u32					read(s32 &);
+			u32					read(u64 &);
+			u32					read(s64 &);
+			u32					read(f32 &);
+			u32					read(f64 &);
 			
-			bool				read_data(xbyte* data, u32 size, u32& written);
-			bool				read_string(char* str, u32 maxstrlen, u32& strlen);
+			bool				view_data(xbyte const*& _data, u32 _size);
+			bool				view_string(char const*& _str, u32& _out_len);
+
+			void				next_block();
 
 		protected:
 			u32					cursor_;
-			xbyte const*		data_;
 			message_block*		block_;
 		};
 
@@ -79,7 +82,7 @@ namespace xcore
 			inline				message_writer(message_block* _block) : cursor_(0), block_(_block) {}
 
 			void				set_cursor(u32);
-			u32					cursor() const;
+			u32					get_cursor() const;
 
 			bool				can_write(u32 num_bytes = 0) const;
 
@@ -96,7 +99,9 @@ namespace xcore
 			void				write(f64 );
 
 			void				write_data(const xbyte*, u32);
-			void				write_string(const char*);
+			void				write_string(const char*, u32 _len=0);
+
+			void				next_block();
 
 		protected:
 			u32					cursor_;
@@ -105,14 +110,27 @@ namespace xcore
 		};
 
 
-		class message
+		class message : public lqueue<message>
 		{
 		public:
-			inline				message(ipeer* _from, ipeer* _to, u32 _flags) : from_(_from), to_(_to), flags_(_flags), nblocks_(0), pblocks_(NULL) {}
+			inline				message(ipeer* _from, ipeer* _to, u32 _flags) : lqueue(this), from_(_from), to_(_to), flags_(_flags), nblocks_(0), pblocks_(NULL) {}
+
+			enum eflags
+			{
+				MESSAGE_FLAG_EVENT = 0x80000000,
+				MESSAGE_FLAG_DATA = 0x40000000,
+
+				MESSAGE_FLAG_EVENT_MASK = 0x0000000f,
+				MESSAGE_FLAG_EVENT_CANNOT_CONNECT = 0x00000000,
+				MESSAGE_FLAG_EVENT_CONNECTED = 0x00000001,
+				MESSAGE_FLAG_EVENT_DISCONNECTED = 0x00000003,
+			};
+
+			ipeer*				get_from() const;
+			ipeer*				get_to() const;
+			u32					get_flags() const;
 
 			bool				is_from(ipeer*) const;
-
-			u32					get_flags() const;
 
 			bool				has_event() const;
 			bool				has_data() const;
@@ -121,7 +139,12 @@ namespace xcore
 			bool				event_disconnected() const;
 			bool				event_cannot_connect() const;
 
-			void				add_block(message_block* _block);
+			void				add_block(message_block*);
+
+			message_reader		get_reader() const;
+			message_writer		get_writer() const;
+
+			void				release(imessage_allocator*);
 
 			XCORE_CLASS_PLACEMENT_NEW_DELETE
 
@@ -133,35 +156,40 @@ namespace xcore
 			message_block*		pblocks_;
 		};
 
-		class outgoing_message
+		class outgoing_messages
 		{
 		public:
-			inline				 outgoing_message() : message_(NULL) {}
-			inline				 outgoing_message(message* _message) : message_(_message) {}
-								 outgoing_message(const outgoing_message&);
-			inline				~outgoing_message() {}
+			inline				 outgoing_messages() : message_(NULL) {}
+			inline				 outgoing_messages(message* _message) : message_(_message) {}
+			inline				~outgoing_messages() {}
 
-			u32					num_blocks() const;
-			void				add_block(message_block*);
-			message_writer		get_writer(u32 _block_index=0) const;
+			ipeer*				get_from() const;
+			ipeer*				get_to() const;
+			u32					get_flags() const;
+
+			message_reader		get_reader() const;
+			message_writer		get_writer() const;
 			
-			void				release(imessage_allocator*);
+			void				enqueue(message*);
+			message*			dequeue();
 
 		protected:
+			inline				outgoing_messages(const outgoing_messages&) {}
+
 			message*			message_;
 		};
 
 
-		class incoming_message
+		class incoming_messages
 		{
 		public:
-			inline				 incoming_message() : message_(NULL) {}
-			inline				 incoming_message(message* _message) : message_(_message) {}
-								 incoming_message(const incoming_message&);
-			inline				~incoming_message() {}
+			inline				 incoming_messages() : message_(NULL) {}
+			inline				 incoming_messages(message* _message) : message_(_message) {}
+			inline				~incoming_messages() {}
 
 			bool				is_from(ipeer*) const;
-			ipeer*				from();
+			ipeer*				get_from();
+			u32					get_flags() const;
 
 			bool				has_event() const;
 			bool				has_data() const;
@@ -170,12 +198,14 @@ namespace xcore
 			bool				event_disconnected() const;
 			bool				event_cannot_connect() const;
 
-			u32					num_blocks() const;
-			message_reader		get_reader(u32 _index=0) const;
+			message_reader		get_reader() const;
 
-			void				release();
+			void				enqueue(message*);
+			message*			dequeue();
 
 		protected:
+			inline				incoming_messages(const incoming_messages&) {}
+
 			message*			message_;
 		};
 
@@ -189,24 +219,6 @@ namespace xcore
 			virtual void			deallocate(message_block*) = 0;
 		};
 
-		class incoming_messages
-		{
-		public:
-			virtual bool			dequeue(incoming_message&) = 0;
-
-		protected:
-			virtual					~incoming_messages() {}
-		};
-
-		class outgoing_messages
-		{
-		public:
-			virtual bool			enqueue(outgoing_message&) = 0;
-			virtual bool			dequeue(outgoing_message&) = 0;
-
-		protected:
-			virtual					~outgoing_messages() {}
-		};
 
 	}
 }

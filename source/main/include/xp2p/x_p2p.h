@@ -20,7 +20,6 @@ namespace xcore
 		class iallocator;
 		class imessage_allocator;
 		class ipeer;
-		class outgoing_message;
 		class outgoing_messages;
 		class incoming_messages;
 
@@ -40,7 +39,7 @@ namespace xcore
 			void				disconnect_from(ipeer* peer);
 
 			u32					connections(ipeer** _out_peers, u32 _in_max_peers);
-			void				send(outgoing_message&);
+			void				send(outgoing_messages&);
 
 			void				event_wakeup();
 			bool				event_loop(incoming_messages*& _received, outgoing_messages*& _sent, u32 _ms_to_wait = 0);

@@ -2,6 +2,7 @@
 #include "xbase\x_allocator.h"
 #include "xbase\x_va_list.h"
 #include "xbase\x_string_ascii.h"
+#include "xbase\x_bit_field.h"
 
 #include "xp2p\x_p2p.h"
 #include "xp2p\x_peer.h"
@@ -140,7 +141,7 @@ namespace xcore
 				ipeer* host = node->start(netip4().port(51888));
 
 				// Let's connect to the tracker which always has peerid '0'
-				ipeer* tracker = node->register_peer(peerid(0), netip4(10, 0, 8, 12).port(51888));
+				ipeer* tracker = node->register_peer(peerid(0), netip4(10, 0, 14, 14).port(51888));
 				node->connect_to(tracker);
 
 				incoming_messages* rcvd_messages;
@@ -158,7 +159,7 @@ namespace xcore
 								{
 									if (rmsg.event_is_connected())
 									{
-										outgoing_message tmsg = ourMessageAllocator->allocate(tracker, rmsg.from(), 0, 40);
+										outgoing_message tmsg = ourMessageAllocator->allocate(tracker, rmsg.get_from(), MSG_FLAG_ANNOUNCE, 40);
 										message_writer writer = tmsg.get_writer();
 										writer.write_string("Hello tracker, how are you?");
 									}
@@ -168,23 +169,32 @@ namespace xcore
 										break;
 									}
 								}
-								else if (rmsg.has_data())
+								
+								if (rmsg.has_data())
 								{
 									message_reader reader = rmsg.get_reader();
 
 									char ip4_str[32];
 									tracker->get_ip4().to_string(ip4_str, sizeof(ip4_str));
 
-									char msgString[256];
-									u32 msgStringLen;
-									reader.read_string(msgString, sizeof(msgString), msgStringLen);
+									if (xbfIsSet(rmsg.get_flags(), MSG_FLAG_ANNOUNCE))
+									{
+										///@ actually we should be getting our peer-id from the message
+									}
+
+									u32 msgStringLen = 0;
+									const char* msgString = "";
+									reader.view_string(msgString, msgStringLen);
 									x_printf("info: message \"%s\"received from tracker \"%s\"", x_va_list(x_va((const char*)msgString), x_va(ip4_str)));
 								}
 							}
 							else
 							{
-								//break;
+								/// break;
 							}
+
+							/// free the incoming message
+							rmsg.release(ourMessageAllocator);
 						}
 
 						// release all messages that where sent
@@ -199,11 +209,8 @@ namespace xcore
 				// Clear all pointers
 				tracker = NULL;
 
-				// Stop all threads, close all sockets, release all resources
+				// Stop server, close all sockets, release all resources
 				node->stop();
-
-				// Release our allocators and their memory back to the system allocator
-				MyAllocator::sRelease(ourSystemAllocator);
 			}
 			else
 			{
@@ -212,7 +219,9 @@ namespace xcore
 				xp2p::node* node = &system;
 
 				// Let's boot as a tracker which always has peerid '0'
-				ipeer* tracker = node->start(netip4().port(51888));
+				netip4 tracker_ep = netip4().port(51888);
+				node->register_peer(0, tracker_ep);
+				ipeer* tracker = node->start(tracker_ep);
 
 				incoming_messages* rcvd_messages;
 				outgoing_messages* sent_messages;
@@ -223,7 +232,7 @@ namespace xcore
 						incoming_message rmsg;
 						while (!rcvd_messages->dequeue(rmsg))
 						{
-							ipeer* peer = rmsg.from();
+							ipeer* peer = rmsg.get_from();
 							if (rmsg.has_event())
 							{
 								if (rmsg.event_is_connected())
@@ -236,19 +245,21 @@ namespace xcore
 									break;
 								}
 							}
-							else if (rmsg.has_data())
+							
+							if (rmsg.has_data())
 							{
 								message_reader reader = rmsg.get_reader();
 								char ip4_str[32];
 								peer->get_ip4().to_string(ip4_str, sizeof(ip4_str));
 
-								char msgString[256];
-								u32 msgStringLen;
-								reader.read_string(msgString, sizeof(msgString), msgStringLen);
+								/// Get a direct pointer to the string (instead of copying)
+								u32 msgStringLen = 0;
+								char const* msgString = "";
+								reader.view_string(msgString, msgStringLen);
 								x_printf("info: message \"%s\"received from peer \"%s\"", x_va_list(x_va((const char*)msgString), x_va(ip4_str)));
 
 								// Send back a message
-								outgoing_message tmsg = ourMessageAllocator->allocate(tracker, rmsg.from(), 0, 40);
+								outgoing_message tmsg = ourMessageAllocator->allocate(tracker, rmsg.get_from(), MSG_FLAG_ANNOUNCE, 40);
 								message_writer writer = tmsg.get_writer();
 								writer.write_string("Hello peer, i am fine!");
 							}
@@ -266,12 +277,14 @@ namespace xcore
 				// Clear all pointers
 				tracker = NULL;
 
-				// Stop all threads, close all sockets, release all resources
+				// Stop server, close all sockets, release all resources
 				node->stop();
 
-				// Release our allocators and their memory back to the system allocator
-				MyAllocator::sRelease(ourSystemAllocator);
 			}
+
+			// Release our allocators and their memory back to the system
+			MyAllocator::sRelease(ourSystemAllocator);
+			MyMessageAllocator::sRelease(ourMessageAllocator);
 		}
 	}
 }

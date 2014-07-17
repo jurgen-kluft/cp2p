@@ -25,10 +25,11 @@ namespace xcore
 		class ipeer_registry
 		{
 		public:
-			virtual ipeer*			register_peer(peerid, netip4) = 0;
+			virtual void			register_peer(ipeer*) = 0;
 			virtual bool			unregister_peer(peerid) = 0;
 
 			virtual ipeer*			find_peer_by_id(peerid) const = 0;
+			virtual ipeer*			find_peer_by_ip(netip4) const = 0;
 
 			virtual void			release() = 0;
 

@@ -17,9 +17,10 @@ namespace xcore
 									peer_registry(iallocator* allocator);
 			virtual					~peer_registry() {}
 
-			virtual ipeer*			register_peer(peerid, netip4);
+			virtual void			register_peer(ipeer* peer);
 			virtual bool			unregister_peer(peerid);
 			virtual ipeer*			find_peer_by_id(peerid) const;
+			virtual ipeer*			find_peer_by_ip(netip4) const;
 
 			virtual void			release();
 
@@ -38,21 +39,11 @@ namespace xcore
 		
 		}
 
-		ipeer*			peer_registry::register_peer(peerid _id, netip4 _netip)
+		void			peer_registry::register_peer(ipeer* peer)
 		{
-			ipeer* peer = find_peer_by_id(_id);
-			// replace netip4 ?
-			return peer;
-		}
 
-		ipeer*			peer_registry::find_peer_by_id(peerid _id) const
-		{
-			for (s32 i = 0; i < num_peers_; ++i)
-			{
-				if (peers_[i]->get_id() == _id)
-					return peers_[i];
-			}
-			return NULL;
+			// replace netip4 ?
+			
 		}
 
 		bool			peer_registry::unregister_peer(peerid _id)
@@ -67,6 +58,21 @@ namespace xcore
 				}
 			}
 			return false;
+		}
+
+		ipeer*			peer_registry::find_peer_by_id(peerid _id) const
+		{
+			for (s32 i = 0; i < num_peers_; ++i)
+			{
+				if (peers_[i]->get_id() == _id)
+					return peers_[i];
+			}
+			return NULL;
+		}
+
+		ipeer*			peer_registry::find_peer_by_ip(netip4) const
+		{
+
 		}
 
 		void			peer_registry::release()
