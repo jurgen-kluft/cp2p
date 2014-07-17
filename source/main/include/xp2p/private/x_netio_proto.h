@@ -32,19 +32,19 @@ namespace xcore
 			virtual s32				write(io_buffer& buf) = 0;
 		};
 
+		typedef void*				io_connection;
+
 		class io_protocol
 		{
 		public:
-			typedef	void*			connection_t;
+			virtual io_connection	open(void*, xp2p::netip4) = 0;
+			virtual void			close(io_connection) = 0;
 
-			virtual connection_t	open(void*) = 0;
-			virtual void			close(connection_t) = 0;
-
-			virtual bool			needs_write(connection_t) = 0;
-			virtual bool			needs_read(connection_t) = 0;
+			virtual bool			needs_write(io_connection) = 0;
+			virtual bool			needs_read(io_connection) = 0;
 			
-			virtual s32				write(connection_t, io_writer*) = 0;
-			virtual s32				read(connection_t, io_reader*) = 0;
+			virtual s32				write(io_connection, io_writer*) = 0;
+			virtual s32				read(io_connection, io_reader*) = 0;
 		};
 	}
 }
