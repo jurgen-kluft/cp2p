@@ -12,13 +12,13 @@ namespace xcore
 		class imessage_sender
 		{
 		public:
-			virtual s32				write(xnetio::io_writer*) = 0;
+			virtual s32				write(io_writer*) = 0;
 		};
 
 		class imessage_receiver
 		{
 		public:
-			virtual s32				read(xnetio::io_reader*) = 0;
+			virtual s32				read(io_reader*) = 0;
 		};
 
 

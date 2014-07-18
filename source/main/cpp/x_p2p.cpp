@@ -13,25 +13,30 @@ namespace xcore
 {
 	namespace xp2p
 	{
+		class peer_connection;
+
 		class peer : public ipeer
 		{
 		public:
-			virtual bool		is_remote() const		{ return is_remote_; }
-			virtual estatus		get_status() const		{ return status_; }
-			virtual netip4		get_ip4() const			{ return endpoint_; }
-			virtual peerid		get_id() const			{ return peerid_; }
+			peer() 
+				: is_remote_(false)
+				, status_(INACTIVE)
+				, endpoint_()
+			{
+			}
+
+			// peer interface
+			virtual bool		is_remote() const			{ return is_remote_; }
+			virtual estatus		get_status() const			{ return status_; }
+			virtual netip4		get_ip4() const				{ return endpoint_; }
 
 		protected:
-			virtual				~peer() {}
-
 			bool				is_remote_;
 			estatus				status_;
 			netip4				endpoint_;
-			peerid				peerid_;
 		};
 
-
-		class node::node_imp : public xnetio::io_protocol
+		class node::node_imp : public peer, public io_protocol, public ns_event, public ns_allocator
 		{
 		public:
 								node_imp(iallocator* _allocator, imessage_allocator* _message_allocator);
@@ -40,7 +45,7 @@ namespace xcore
 			ipeer*				start(netip4 _endpoint);
 			void				stop();
 
-			ipeer*				register_peer(peerid _id, netip4 _endpoint);
+			ipeer*				register_peer(netip4 _endpoint);
 			void				unregister_peer(ipeer*);
 
 			void				connect_to(ipeer* _peer);
@@ -53,38 +58,48 @@ namespace xcore
 			void				event_wakeup();
 			bool				event_loop(incoming_messages*& _rcvd, outgoing_messages*& _sent, u32 _ms_to_wait);
 
+			// ns_event interface
+			virtual void		ns_callback(ns_connection *, event, void *evp);
+
+			// ns_allocator interface
+			virtual void*		ns_allocate(u32 _size, u32 _alignment);
+			virtual void		ns_deallocate(void* _old);
+
 			// io_protocol interface
-			virtual xnetio::io_connection open(void* _key, netip4 _ip);
-			virtual void		close(xnetio::io_connection);
+			virtual io_connection io_open(void* _key, netip4 _ip);
+			virtual void		io_close(io_connection);
 
-			virtual bool		needs_write(xnetio::io_connection);
-			virtual bool		needs_read(xnetio::io_connection);
+			virtual bool		io_needs_write(io_connection);
+			virtual bool		io_needs_read(io_connection);
 
-			virtual s32			write(xnetio::io_connection, xnetio::io_writer*);
-			virtual s32			read(xnetio::io_connection, xnetio::io_reader*);
+			virtual s32			io_write(io_connection, io_writer*);
+			virtual s32			io_read(io_connection, io_reader*);
 
 			XCORE_CLASS_PLACEMENT_NEW_DELETE
 
 			iallocator*			allocator_;
 			imessage_allocator*	message_allocator_;
-			ipeer_registry*		peer_registry_;
-			xnetio::ns_server*	server_;
+			ns_server*			server_;
+			
+			lqueue<peer_connection>* inactive_peers_;
+			lqueue<peer_connection>* active_peers_;
+
 			incoming_messages	incoming_messages_;
 		};
 
-		class peer_connection : public ipeer
+		class peer_connection : public peer, public lqueue<peer_connection>
 		{
 		public:
-			// peer interface
-			virtual bool		is_remote() const			{ return is_remote_; }
-			virtual estatus		get_status() const			{ return status_; }
-			virtual netip4		get_ip4() const				{ return endpoint_; }
-			virtual peerid		get_id() const				{ return peerid_; }
+			peer_connection() 
+				: peer()
+				, lqueue<peer_connection>(this) 
+				, connection_(NULL)
+			{
+			}
 
-			bool				is_remote_;
-			estatus				status_;
-			netip4				endpoint_;
-			peerid				peerid_;
+			XCORE_CLASS_PLACEMENT_NEW_DELETE
+
+			ns_connection*		connection_;
 
 			outgoing_messages	outgoing_messages_;
 			incoming_messages	incoming_messages_;
@@ -92,8 +107,11 @@ namespace xcore
 
 
 		node::node_imp::node_imp(iallocator* _allocator, imessage_allocator* _message_allocator)
-			: allocator_(_allocator)
+			: peer()
+			, allocator_(_allocator)
 			, message_allocator_(_message_allocator)
+			, inactive_peers_(NULL)
+			, active_peers_(NULL)
 		{
 
 		}
@@ -105,10 +123,8 @@ namespace xcore
 
 		ipeer*	node::node_imp::start(netip4 _endpoint)
 		{
-			peer_registry_ = gCreatePeerRegistry(allocator_);
-			//xnetio::ns_server_init()
-
-			return NULL;
+			ns_server_init(this, server_, this, this, this);
+			return this;
 		}
 
 		void	node::node_imp::stop()
@@ -116,29 +132,77 @@ namespace xcore
 
 		}
 
-		ipeer*	node::node_imp::register_peer(peerid _id, netip4 _endpoint)
+		peer_connection*	_find_peer(lqueue<peer_connection>* _peers, netip4 _endpoint)
 		{
-			return NULL;
+			peer_connection* peer = NULL;
+			if (_peers == NULL)
+				return peer;
+
+			peer_connection* iter = _peers->get();
+			while (iter != NULL)
+			{
+				if (iter->get_ip4() == _endpoint)
+				{
+					peer = iter;
+					break;
+				}
+				iter = iter->get_next();
+			}
+			return peer;
+		}
+
+		ipeer*	node::node_imp::register_peer(netip4 _endpoint)
+		{
+			peer_connection* peer = _find_peer(inactive_peers_, _endpoint);
+			if (peer == NULL)
+			{
+				peer = _find_peer(active_peers_, _endpoint);
+			}
+
+			if (peer == NULL)
+			{
+				void * mem = allocator_->allocate(sizeof(peer_connection), sizeof(void*));
+				peer = new (mem) peer_connection();
+			}
+
+			return peer;
 		}
 
 		void	node::node_imp::unregister_peer(ipeer* _peer)
 		{
-
+			peer_connection* p = (peer_connection*) _peer;
+			if (p == active_peers_)
+				active_peers_ = active_peers_->get_next();
+			else if (p == inactive_peers_)
+				inactive_peers_ = inactive_peers_->get_next();
+			p->dequeue();
 		}
 
 		void	node::node_imp::connect_to(ipeer* _peer)
 		{
-
+			peer_connection* p = (peer_connection*) _peer;
+			ns_connect(server_, _peer->get_ip4(), (void*)_peer);
 		}
 
 		void	node::node_imp::disconnect_from(ipeer* _peer)
 		{
-
+			peer_connection* p = (peer_connection*) _peer;
+			ns_disconnect(server_, p->connection_);
 		}
 
 		u32		node::node_imp::connections(ipeer** _out_peers, u32 _in_max_peers)
 		{
-			return 0;
+			u32 i = 0;
+			if (active_peers_ != NULL)
+			{
+				peer_connection* iter = active_peers_->get();
+				while (iter != NULL && i < _in_max_peers)
+				{
+					_out_peers[i++] = iter;
+					iter = iter->get_next();
+				}
+			}
+			return i;
 		}
 
 		void	node::node_imp::send(outgoing_messages& _msg)
@@ -147,7 +211,7 @@ namespace xcore
 			while (m != NULL)
 			{
 				peer_connection* to = (peer_connection*)(m->get_to());
-				to->enqueue(m);
+				to->outgoing_messages_.enqueue(m);
 				m = _msg.dequeue();
 			}
 		}
@@ -160,6 +224,60 @@ namespace xcore
 		bool	node::node_imp::event_loop(incoming_messages*&, outgoing_messages*& _sent, u32 _ms_to_wait)
 		{
 			return false;
+		}
+
+		// -------------------------------------------------------------------------------------------
+
+		void	node::node_imp::ns_callback(ns_connection *, event, void *evp)
+		{
+
+		}
+
+		// -------------------------------------------------------------------------------------------
+
+		void*		node::node_imp::ns_allocate(u32 _size, u32 _alignment)
+		{
+			return allocator_->allocate(_size, _alignment);
+		}
+
+		void		node::node_imp::ns_deallocate(void* _old)
+		{
+			allocator_->deallocate(_old);
+		}
+
+		// -------------------------------------------------------------------------------------------
+
+		io_connection node::node_imp::io_open(void* _key, netip4 _ip)
+		{
+			// Search in the peer registry, if not found create a new peer connection
+			// Set the key on the peer connection so that we can find it next time
+
+			return NULL;
+		}
+
+		void		node::node_imp::io_close(io_connection)
+		{
+
+		}
+
+		bool		node::node_imp::io_needs_write(io_connection)
+		{
+			return false;
+		}
+
+		bool		node::node_imp::io_needs_read(io_connection)
+		{
+			return false;
+		}
+
+		s32			node::node_imp::io_write(io_connection, io_writer*)
+		{
+			return 0;
+		}
+
+		s32			node::node_imp::io_read(io_connection, io_reader*)
+		{
+			return 0;
 		}
 
 
@@ -186,9 +304,9 @@ namespace xcore
 			imp_->stop();
 		}
 
-		ipeer*				node::register_peer(peerid _id, netip4 _endpoint)
+		ipeer*				node::register_peer(netip4 _endpoint)
 		{
-			return imp_->register_peer(_id, _endpoint);
+			return imp_->register_peer(_endpoint);
 		}
 
 		void				node::unregister_peer(ipeer* _peer)

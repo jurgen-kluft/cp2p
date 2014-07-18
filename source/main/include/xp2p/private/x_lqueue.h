@@ -14,7 +14,7 @@ namespace xcore
 {
 	namespace xp2p
 	{
-		// queue using a doubly linked list
+		// queue using a circular doubly linked list
 
 		template <typename T>
 		class lqueue
@@ -24,6 +24,8 @@ namespace xcore
 
 			inline T*		get_next() const						{ return next_; }
 			inline T*		get_prev() const						{ return prev_; }
+
+			inline T*		get() const								{ return next_->get_prev(); }
 
 			inline void		enqueue(T* _item)
 			{
@@ -35,7 +37,7 @@ namespace xcore
 				_item->set_prev(tail);
 			}
 
-			inline T*		dequeue()
+			inline T*		dequeue(T** current_head = NULL)
 			{
 				T* head = this->get_next();
 				T* item = head->get_prev();
@@ -44,6 +46,8 @@ namespace xcore
 				head->set_prev(tail);
 				item->set_next(NULL);
 				item->set_prev(NULL);
+				if (current_head != NULL && item == *current_head)
+					*current_head = head;
 				return item;
 			}
 

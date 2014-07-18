@@ -170,6 +170,7 @@ namespace xcore
 			message_reader		get_reader() const;
 			message_writer		get_writer() const;
 			
+			bool				has_message() const;
 			void				enqueue(message*);
 			message*			dequeue();
 
@@ -200,6 +201,7 @@ namespace xcore
 
 			message_reader		get_reader() const;
 
+			bool				has_message() const;
 			void				enqueue(message*);
 			message*			dequeue();
 

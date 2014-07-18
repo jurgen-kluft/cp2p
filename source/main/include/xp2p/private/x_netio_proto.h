@@ -12,7 +12,7 @@
 
 namespace xcore
 {
-	namespace xnetio
+	namespace xp2p
 	{
 		struct io_buffer
 		{
@@ -37,14 +37,14 @@ namespace xcore
 		class io_protocol
 		{
 		public:
-			virtual io_connection	open(void*, xp2p::netip4) = 0;
-			virtual void			close(io_connection) = 0;
+			virtual io_connection	io_open(void*, xp2p::netip4) = 0;
+			virtual void			io_close(io_connection) = 0;
 
-			virtual bool			needs_write(io_connection) = 0;
-			virtual bool			needs_read(io_connection) = 0;
+			virtual bool			io_needs_write(io_connection) = 0;
+			virtual bool			io_needs_read(io_connection) = 0;
 			
-			virtual s32				write(io_connection, io_writer*) = 0;
-			virtual s32				read(io_connection, io_reader*) = 0;
+			virtual s32				io_write(io_connection, io_writer*) = 0;
+			virtual s32				io_read(io_connection, io_reader*) = 0;
 		};
 	}
 }
