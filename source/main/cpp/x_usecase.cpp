@@ -138,10 +138,10 @@ namespace xcore
 			{
 				xp2p::node system(ourSystemAllocator, ourMessageAllocator);
 				xp2p::node* node = &system;
-				ipeer* host = node->start(netip4().port(51888));
+				ipeer* host = node->start(netip4().set_port(51888));
 
 				// Let's connect to the tracker 
-				ipeer* tracker = node->register_peer(netip4(10, 0, 14, 14).port(51888));
+				ipeer* tracker = node->register_peer(netip4(10, 0, 14, 14).set_port(51888));
 				node->connect_to(tracker);
 
 				incoming_messages* rcvd_messages;
@@ -218,7 +218,7 @@ namespace xcore
 				xp2p::node* node = &system;
 
 				// Let's boot as a tracker which always has peerid '0'
-				netip4 tracker_ep = netip4().port(51888);
+				netip4 tracker_ep = netip4().set_port(51888);
 				ipeer* tracker = node->start(tracker_ep);
 
 				incoming_messages* rcvd_messages;

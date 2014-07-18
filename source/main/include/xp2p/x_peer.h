@@ -22,7 +22,7 @@ namespace xcore
 		class ipeer
 		{
 		public:
-			enum estatus { INACTIVE, CONNECT, CONNECTING, CONNECTED, DISCONNECT, DISCONNECTING, DISCONNECTED };
+			enum estatus { INACTIVE=0, CONNECT=1, CONNECTING=2, CONNECTED=3, DISCONNECT=11, DISCONNECTING=12, DISCONNECTED=13 };
 
 			virtual bool		is_remote() const = 0;
 			virtual estatus		get_status() const = 0;
