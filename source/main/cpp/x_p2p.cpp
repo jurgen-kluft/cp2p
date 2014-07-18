@@ -30,6 +30,9 @@ namespace xcore
 			virtual estatus		get_status() const			{ return status_; }
 			virtual netip4		get_ip4() const				{ return endpoint_; }
 
+			inline bool			is_not_connected() const	{ estatus s = get_status(); return s==0 || s>=DISCONNECT; }
+			inline void			set_status(estatus s)		{ status_ = s; }
+
 		protected:
 			bool				is_remote_;
 			estatus				status_;
@@ -129,7 +132,7 @@ namespace xcore
 
 		void	node::node_imp::stop()
 		{
-
+			ns_server_free(server_);
 		}
 
 		peer_connection*	_find_peer(lqueue<peer_connection>* _peers, netip4 _endpoint)
@@ -180,8 +183,16 @@ namespace xcore
 
 		void	node::node_imp::connect_to(ipeer* _peer)
 		{
+			if (_peer == this)	// Do not connect to ourselves
+				return;
+			
 			peer_connection* p = (peer_connection*) _peer;
-			ns_connect(server_, _peer->get_ip4(), (void*)_peer);
+			if (p->connection_ == NULL)
+			{
+				p->set_status(ipeer::CONNECT);
+				p->connection_ = ns_connect(server_, _peer->get_ip4(), (void*)_peer);
+
+			}
 		}
 
 		void	node::node_imp::disconnect_from(ipeer* _peer)
@@ -218,7 +229,7 @@ namespace xcore
 
 		void	node::node_imp::event_wakeup()
 		{
-
+			ns_server_wakeup(server_);
 		}
 
 		bool	node::node_imp::event_loop(incoming_messages*&, outgoing_messages*& _sent, u32 _ms_to_wait)
@@ -228,9 +239,23 @@ namespace xcore
 
 		// -------------------------------------------------------------------------------------------
 
-		void	node::node_imp::ns_callback(ns_connection *, event, void *evp)
+		void	node::node_imp::ns_callback(ns_connection * conn, event e, void *evp)
 		{
-
+			switch (e)
+			{
+				case ns_event::EVENT_POLL: 
+					break;
+				case ns_event::EVENT_ACCEPT: 
+					break;
+				case ns_event::EVENT_CONNECT: 
+					break;
+				case ns_event::EVENT_RECV: 
+					break;
+				case ns_event::EVENT_SEND: 
+					break;
+				case ns_event::EVENT_CLOSE: 
+					break;
+			}
 		}
 
 		// -------------------------------------------------------------------------------------------
