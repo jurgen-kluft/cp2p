@@ -5,26 +5,17 @@
 #pragma once 
 #endif
 
+#include "xp2p\x_types.h"
+
 namespace xcore
 {
-	namespace xnetio
+	namespace xp2p
 	{
 		class ns_allocator
 		{
 		public:
-			virtual void*	alloc(u32 _size, u32 _alignment) = 0;
-			virtual void	dealloc(void* _old) = 0;
-		};
-
-		// Events. Meaning of event parameter (evp) is given in the comment.
-		enum ns_event 
-		{
-			NS_EVENT_POLL,     // Sent to each connection on each call to ns_server_poll()
-			NS_EVENT_ACCEPT,   // New connection accept()-ed. socket_address * remote_addr
-			NS_EVENT_CONNECT,  // connect() succeeded or failed. int *success_status
-			NS_EVENT_RECV,     // A message has been received. ns_message_header * header
-			NS_EVENT_SEND,     // A message has been written to a socket. ns_message_header * header
-			NS_EVENT_CLOSE     // Connection is closed. NULL
+			virtual void*	ns_allocate(u32 _size, u32 _alignment) = 0;
+			virtual void	ns_deallocate(void* _old) = 0;
 		};
 
 		// Forward declares
@@ -34,18 +25,35 @@ namespace xcore
 
 		// Callback function (event handler) prototype, must be defined by user.
 		// Net skeleton will call event handler, passing events defined above.
-		typedef void (*ns_callback_t)(ns_connection *, ns_event, void *evp);
+		class ns_event
+		{
+		public:
+			// Events. Meaning of event parameter (evp) is given in the comment.
+			enum event 
+			{
+				EVENT_POLL,     // Sent to each connection on each call to ns_server_poll()
+				EVENT_ACCEPT,   // New connection accept()-ed. socket_address * remote_addr
+				EVENT_CONNECT,  // connect() succeeded or failed. int *success_status
+				EVENT_RECV,     // A message has been received. ns_message_header * header
+				EVENT_SEND,     // A message has been written to a socket. ns_message_header * header
+				EVENT_CLOSE     // Connection is closed. NULL
+			};
 
-		void			ns_server_init(ns_allocator *, ns_server *&, io_protocol * , void * server_data, ns_callback_t);
+			virtual void	ns_callback(ns_connection *, event, void *evp) = 0;
+		};
+
+		void			ns_server_init(ns_allocator *, ns_server *&, io_protocol * , void * server_data, ns_event*);
 		s32				ns_server_bind(ns_server *, const char * addr);
 		void			ns_server_free(ns_server *);
 		
 		s32				ns_server_poll(ns_server *, s32 milli);
-		ns_connection*	ns_connect(ns_server *, const char *host, s32 port, void * connection_param);
+
+		ns_connection*	ns_connect(ns_server *, netip4 ip, void * connection_param);
+		void			ns_disconnect(ns_server *, ns_connection*);
 
 		void			ns_server_wakeup(ns_server *);
-		void			ns_server_wakeup_ex(ns_server *, ns_callback_t, void *, u32);
-		void			ns_server_foreach_connection(ns_server *, ns_callback_t cb, void *param);
+		void			ns_server_wakeup_ex(ns_server *, ns_event*, void *, u32);
+		void			ns_server_foreach_connection(ns_server *, ns_event*, void *param);
 	}
 }
 

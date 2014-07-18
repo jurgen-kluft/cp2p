@@ -34,6 +34,9 @@
 #include <time.h>
 //#include <signal.h>
 
+#include <winsock2.h>
+#include <ws2tcpip.h>
+
 #ifdef _MSC_VER
 #pragma comment(lib, "ws2_32.lib")    // Linking with windows socket library
 #endif
@@ -76,7 +79,7 @@ typedef SOCKET sock_t;
 
 namespace xcore
 {
-	namespace xnetio
+	namespace xp2p
 	{
 		#define NS_SERVER_MAX_CONNECTIONS	32
 
@@ -93,18 +96,6 @@ namespace xcore
 		#define NSF_USER_4                  (1 << 29)
 		#define NSF_USER_5                  (1 << 30)
 		#define NSF_USER_6                  (1 << 31)
-
-		#ifndef NS_MALLOC
-			#define NS_MALLOC		malloc
-		#endif
-
-		#ifndef NS_REALLOC
-			#define NS_REALLOC		realloc
-		#endif
-
-		#ifndef NS_FREE
-			#define NS_FREE			free
-		#endif
 
 		typedef s32		socklen_t;
 
@@ -170,7 +161,7 @@ namespace xcore
 
 			void*				server_data;
 			ns_socket_t			listening_sock;
-			ns_callback_t		callback;
+			ns_event*			callback;
 			ns_socket_t			ctl[2];
 			ns_allocator *		allocator;
 			io_protocol *		protocol;
@@ -197,7 +188,7 @@ namespace xcore
 			ns_socket_t				sock;
 			socket_address			sa;
 
-			io_protocol::connection_t conn;			
+			io_connection			io_connection_;
 			void*					connection_data;
 			
 			time_t					last_io_time;
@@ -253,9 +244,19 @@ namespace xcore
 			XCORE_CLASS_PLACEMENT_NEW_DELETE
 		};
 
+		ns_connection * ns_create_connection(ns_server * server)
+		{
+			void * conn_mem = server->allocator->ns_allocate(sizeof(ns_connection), sizeof(void*));
+			if (conn_mem == NULL) 
+			{
+				return NULL;
+			}
+			return new (conn_mem) ns_connection();
+		}
+
 		struct ctl_msg 
 		{
-			ns_callback_t callback;
+			ns_event* callback;
 			char message[1024 * 8];
 		};
 
@@ -283,7 +284,13 @@ namespace xcore
 			server->active_connections[i] = c;
 			server->num_active_connections++;
 
-			c->conn = server->protocol->open(c);
+			xp2p::netip4 netip;
+			netip.ip_.aip_[0] = c->sa.sin.sin_addr.S_un.S_un_b.s_b1;
+			netip.ip_.aip_[1] = c->sa.sin.sin_addr.S_un.S_un_b.s_b2;
+			netip.ip_.aip_[2] = c->sa.sin.sin_addr.S_un.S_un_b.s_b3;
+			netip.ip_.aip_[3] = c->sa.sin.sin_addr.S_un.S_un_b.s_b4;
+			netip.port_ = c->sa.sin.sin_port;
+			c->io_connection_ = server->protocol->io_open(c, netip);
 		}
 
 		static void ns_remove_conn(ns_server *server, u32 ci) 
@@ -311,20 +318,21 @@ namespace xcore
 			return -1;
 		}
 				
-		static void ns_call(ns_connection * conn, ns_event ev, void *p) 
+		static void ns_call(ns_connection * conn, ns_event::event ev, void *p) 
 		{
-			if (conn->server->callback) conn->server->callback(conn, ev, p);
+			if (conn->server->callback!=NULL)
+				conn->server->callback->ns_callback(conn, ev, p);
 		}
 
 		static void ns_close_conn(ns_server * server, u32 conn_index)
 		{
 			DBG(("%p %d", conn, conn->flags));
 			ns_connection * conn = server->active_connections[conn_index];
-			ns_call(conn, NS_EVENT_CLOSE, NULL);
-			server->protocol->close(conn->conn);
+			ns_call(conn, ns_event::EVENT_CLOSE, NULL);
+			server->protocol->io_close(conn->io_connection_);
 			ns_remove_conn(server, conn_index);
 			closesocket(conn->sock.s);
-			NS_FREE(conn);
+			server->allocator->ns_deallocate(conn);
 		}
 
 		static void ns_close_conn(ns_server * server, ns_connection * conn)
@@ -532,7 +540,8 @@ namespace xcore
 			sock.s = accept(server->listening_sock.s, &sa.sa, &len);
 			if (sock.is_valid()) 
 			{
-				if ((c = (ns_connection *) NS_MALLOC(sizeof(*c))) == NULL || memset(c, 0, sizeof(*c)) == NULL) 
+				c = ns_create_connection(server);
+				if (c == NULL || memset(c, 0, sizeof(*c)) == NULL) 
 				{
 					closesocket(sock.s);
 				}
@@ -545,7 +554,7 @@ namespace xcore
 					c->flags |= NSF_ACCEPTED;
 
 					ns_add_conn(server, c);
-					ns_call(c, NS_EVENT_ACCEPT, &sa);
+					ns_call(c, ns_event::EVENT_ACCEPT, &sa);
 					DBG(("%p %d %p %p", c, c->sock, c->ssl, server->ssl_ctx));
 				}
 			}
@@ -636,19 +645,19 @@ namespace xcore
 				}
 				else
 				{
-					ns_call(_conn, NS_EVENT_CONNECT, &ok);
+					ns_call(_conn, ns_event::EVENT_CONNECT, &ok);
 				}
 			}
 			else
 			{
-				result = _server->protocol->read(_conn->conn, _conn);
+				result = _server->protocol->io_read(_conn->io_connection_, _conn);
 			}
 			return result;
 		}
 
 		static int ns_write_to_socket(ns_server * _server, ns_connection * _conn)
 		{
-			s32 result = _server->protocol->write(_conn->conn, _conn);
+			s32 result = _server->protocol->io_write(_conn->io_connection_, _conn);
 			DBG(("%p %d -> %d bytes", conn, conn->flags, result));
 			return result;
 		}
@@ -689,11 +698,11 @@ namespace xcore
 				}
 				else
 				{
-					if (server->protocol->needs_read(c->conn))
+					if (server->protocol->io_needs_read(c->io_connection_))
 					{
 						xbfSet(c->flags, NSF_WANT_READ);
 					}
-					if (server->protocol->needs_write(c->conn))
+					if (server->protocol->io_needs_write(c->io_connection_))
 					{
 						xbfSet(c->flags, NSF_WANT_WRITE);
 					}
@@ -705,7 +714,7 @@ namespace xcore
 			for (s32 i=0; i<server->num_active_connections; ) 
 			{
 				ns_connection * conn = server->active_connections[i];
-				ns_call(conn, NS_EVENT_POLL, &current_time);
+				ns_call(conn, ns_event::EVENT_POLL, &current_time);
 				
 				if (xbfIsSet(conn->flags, NSF_CLOSE_IMMEDIATELY))
 				{
@@ -809,7 +818,7 @@ namespace xcore
 								xbfClear(conn->flags, NSF_CONNECTING);
 								xbfSet(conn->flags, NSF_CONNECTED);
 								s32 status = 1;
-								ns_call(conn, NS_EVENT_CONNECT, &status);
+								ns_call(conn, ns_event::EVENT_CONNECT, &status);
 							} 
 
 							conn->last_io_time = current_time;
@@ -837,27 +846,23 @@ namespace xcore
 			return server->num_active_connections;
 		}
 
-		ns_connection * ns_connect(ns_server *server, const char *host, s32 port, void *param) 
+		ns_connection * ns_connect(ns_server *server, netip4 netip, void *param) 
 		{
 			ns_socket_t sock;
 			sockaddr_in sin;
-			hostent *he = NULL;
-			ns_connection *conn = NULL;
-			s32 connect_ret_val;
 
-			if (host == NULL || (he = gethostbyname(host)) == NULL || (sock.s = socket(AF_INET, SOCK_STREAM, 0)) == INVALID_SOCKET) 
-			{
-				DBG(("gethostbyname(%s) failed: %s", host, strerror(errno)));
-				return NULL;
-			}
+			ns_connection *conn = NULL;
 
 			sin.sin_family = AF_INET;
-			sin.sin_port = htons((u16) port);
-			sin.sin_addr = * (in_addr *) he->h_addr_list[0];
+			sin.sin_port = htons((u16) netip.get_port());
+			sin.sin_addr.S_un.S_un_b.s_b1 = netip.ip_.aip_[0];
+			sin.sin_addr.S_un.S_un_b.s_b2 = netip.ip_.aip_[1];
+			sin.sin_addr.S_un.S_un_b.s_b3 = netip.ip_.aip_[2];
+			sin.sin_addr.S_un.S_un_b.s_b4 = netip.ip_.aip_[3];
 
 			// ! connect in non-blocking mode
 			ns_set_non_blocking_mode(sock);
-			connect_ret_val = connect(sock.s, (sockaddr *) &sin, sizeof(sin));
+			s32 connect_ret_val = connect(sock.s, (sockaddr *) &sin, sizeof(sin));
 			if (ns_is_error(connect_ret_val)) 
 			{
 				closesocket(sock.s);
@@ -865,13 +870,12 @@ namespace xcore
 			}
 			else 
 			{
-				void * conn_mem = server->allocator->alloc(sizeof(ns_connection), sizeof(void*));
-				if (conn_mem == NULL) 
+				conn = ns_create_connection(server);
+				if (conn == NULL) 
 				{
 					closesocket(sock.s);
 					return NULL;
 				}
-				conn = new (conn_mem) ns_connection();
 			}
 
 			memset(conn, 0, sizeof(*conn));
@@ -887,10 +891,16 @@ namespace xcore
 			return conn;
 		}
 
+		void	ns_disconnect(ns_server * server, ns_connection* conn)
+		{
+			conn->flags |= NSF_CLOSE_IMMEDIATELY;
+		}
+
+
 		ns_connection * ns_add_sock(ns_server *s, ns_socket_t sock, void *p) 
 		{
-			ns_connection *conn;
-			if ((conn = (ns_connection *) NS_MALLOC(sizeof(*conn))) != NULL)
+			ns_connection *conn = ns_create_connection(s);
+			if (conn != NULL)
 			{
 				memset(conn, 0, sizeof(*conn));
 				ns_set_non_blocking_mode(sock);
@@ -904,23 +914,23 @@ namespace xcore
 			return conn;
 		}
 
-		void ns_server_foreach_connection(ns_server *server, ns_callback_t cb, void *param)
+		void ns_server_foreach_connection(ns_server *server, ns_event* cb, void *param)
 		{
 			for (s32 i=0; i<server->num_active_connections; ++i) 
 			{
 				ns_connection * conn = server->active_connections[i];
-				cb(conn, NS_EVENT_POLL, param);
+				cb->ns_callback(conn, ns_event::EVENT_POLL, param);
 			}
 		}
 
-		void ns_server_wakeup_ex(ns_server *server, ns_callback_t cb, void *data, u32 len) 
+		void ns_server_wakeup_ex(ns_server *server, ns_event* cb, void *data, u32 len) 
 		{
 			ctl_msg lctl_msg;
 			if (server->ctl[0].is_valid() && data != NULL && len < sizeof(lctl_msg.message)) 
 			{
 				lctl_msg.callback = cb;
 				memcpy(lctl_msg.message, data, len);
-				send(server->ctl[0].s, (char *) &lctl_msg, sizeof(ns_callback_t) + len, 0);
+				send(server->ctl[0].s, (char *) &lctl_msg, sizeof(ns_event*) + len, 0);
 				recv(server->ctl[0].s, (char *) &len, 1, 0);
 			}
 		}
@@ -930,9 +940,9 @@ namespace xcore
 			ns_server_wakeup_ex(server, NULL, (void *) "", 0);
 		}
 
-		void ns_server_init(ns_allocator * _allocator, ns_server *& server, io_protocol * protocol, void * server_data, ns_callback_t cb) 
+		void ns_server_init(ns_allocator * _allocator, ns_server *& server, io_protocol * protocol, void * server_data, ns_event* cb) 
 		{
-			void * ip_mem = _allocator->alloc(sizeof(ns_server), sizeof(void*));
+			void * ip_mem = _allocator->ns_allocate(sizeof(ns_server), sizeof(void*));
 			server = new (ip_mem) ns_server();
 			server->allocator = _allocator;
 			server->protocol = protocol;
@@ -970,7 +980,7 @@ namespace xcore
 				ns_close_conn(s, i);
 			}
 
-			s->allocator->dealloc(s);
+			s->allocator->ns_deallocate(s);
 		}
 
 	}

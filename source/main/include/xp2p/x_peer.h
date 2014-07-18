@@ -22,12 +22,11 @@ namespace xcore
 		class ipeer
 		{
 		public:
-			enum estatus { CONNECTING, CONNECTED, DISCONNECTING, DISCONNECTED };
+			enum estatus { INACTIVE, CONNECT, CONNECTING, CONNECTED, DISCONNECT, DISCONNECTING, DISCONNECTED };
 
 			virtual bool		is_remote() const = 0;
 			virtual estatus		get_status() const = 0;
 			virtual netip4		get_ip4() const = 0;
-			virtual peerid		get_id() const = 0;
 
 		protected:
 			virtual				~ipeer() {}

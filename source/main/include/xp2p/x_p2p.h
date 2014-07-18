@@ -32,7 +32,7 @@ namespace xcore
 			ipeer*				start(netip4 endpoint);
 			void				stop();
 
-			ipeer*				register_peer(peerid id, netip4 endpoint);
+			ipeer*				register_peer(netip4 endpoint);
 			void				unregister_peer(ipeer*);
 
 			void				connect_to(ipeer* peer);
