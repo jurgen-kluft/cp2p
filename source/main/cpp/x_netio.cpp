@@ -195,38 +195,37 @@ namespace xcore
 			
 			u32						flags;
 
-			virtual s32				read(io_buffer& iobuf)
+			virtual s32				read(xbyte* _buffer, u32 _size)
 			{
 				s32 bytes_read = 0;
-				
-				s32 n;
-				while ((n = recv(sock.s, (char*)(iobuf.data + bytes_read), iobuf.size - bytes_read, 0)) > 0)
-				{
-					bytes_read += n;
-					if (bytes_read == iobuf.size)
-						break;
-				}
+				if (_size > 0)
+				{				
+					s32 n;
+					while ((n = recv(sock.s, (char*)(_buffer + bytes_read), _size - bytes_read, 0)) > 0)
+					{
+						bytes_read += n;
+						if (bytes_read == _size)
+							break;
+					}
 
-				if (ns_is_error(n))
-				{
-					flags |= NSF_CLOSE_IMMEDIATELY;
-					return -1;
+					if (ns_is_error(n))
+					{
+						flags |= NSF_CLOSE_IMMEDIATELY;
+						return -1;
+					}
 				}
-				else
-				{
-					return bytes_read;
-				}
+				return bytes_read;
 			}
 
-			virtual s32				write(io_buffer& iobuf)
+			virtual s32				write(xbyte const* _buffer, u32 _size)
 			{
 				s32 bytes_written = 0;
 
 				s32 n;
-				while ((n = send(sock.s, (const char*)(iobuf.data + bytes_written), iobuf.size - bytes_written, 0)) > 0)
+				while ((n = send(sock.s, (const char*)(_buffer + bytes_written), _size - bytes_written, 0)) > 0)
 				{
 					bytes_written += n;
-					if (bytes_written == iobuf.size)
+					if (bytes_written == _size)
 						break;
 				}
 
@@ -290,7 +289,7 @@ namespace xcore
 			netip.ip_.aip_[2] = c->sa.sin.sin_addr.S_un.S_un_b.s_b3;
 			netip.ip_.aip_[3] = c->sa.sin.sin_addr.S_un.S_un_b.s_b4;
 			netip.port_ = c->sa.sin.sin_port;
-			c->io_connection_ = server->protocol->io_open(c, netip);
+			c->io_connection_ = server->protocol->io_open(netip);
 		}
 
 		static void ns_remove_conn(ns_server *server, u32 ci) 
@@ -321,7 +320,7 @@ namespace xcore
 		static void ns_call(ns_connection * conn, ns_event::event ev, void *p) 
 		{
 			if (conn->server->callback!=NULL)
-				conn->server->callback->ns_callback(conn, ev, p);
+				conn->server->callback->ns_callback(conn->io_connection_, ev, p);
 		}
 
 		static void ns_close_conn(ns_server * server, u32 conn_index)

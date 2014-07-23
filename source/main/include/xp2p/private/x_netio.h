@@ -24,7 +24,7 @@ namespace xcore
 		class io_protocol;
 
 		// Callback function (event handler) prototype, must be defined by user.
-		// Net skeleton will call event handler, passing events defined above.
+		// ns_server_poll will call event handler, passing events defined below.
 		class ns_event
 		{
 		public:
@@ -33,13 +33,11 @@ namespace xcore
 			{
 				EVENT_POLL,     // Sent to each connection on each call to ns_server_poll()
 				EVENT_ACCEPT,   // New connection accept()-ed. socket_address * remote_addr
-				EVENT_CONNECT,  // connect() succeeded or failed. int *success_status
-				EVENT_RECV,     // A message has been received. ns_message_header * header
-				EVENT_SEND,     // A message has been written to a socket. ns_message_header * header
+				EVENT_CONNECT,  // Connect() succeeded or failed. int *success_status
 				EVENT_CLOSE     // Connection is closed. NULL
 			};
 
-			virtual void	ns_callback(ns_connection *, event, void *evp) = 0;
+			virtual void	ns_callback(io_connection, event, void *evp) = 0;
 		};
 
 		void			ns_server_init(ns_allocator *, ns_server *&, io_protocol * , void * server_data, ns_event*);

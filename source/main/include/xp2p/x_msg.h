@@ -32,8 +32,8 @@ namespace xcore
 			void				set_flags(u32 _flags);
 
 			u32					get_size() const;
-			void*				get_data();
-			const void*			get_data() const;
+			xbyte*				get_data();
+			const xbyte*		get_data() const;
 
 			XCORE_CLASS_PLACEMENT_NEW_DELETE
 
@@ -47,10 +47,15 @@ namespace xcore
 		class message_reader
 		{
 		public:
-			inline				message_reader(message_block* _block) : cursor_(0), block_(_block) {}
+			inline				message_reader(message_block* _block=NULL) : cursor_(0), block_(_block) {}
+
+			bool				has_block() const;
 
 			void				set_cursor(u32);
 			u32					get_cursor() const;
+
+			u32					get_flags() const;
+			u32					get_size() const;
 
 			bool				can_read(u32 number_of_bytes) const;		// check if we still can read n number of bytes
 
