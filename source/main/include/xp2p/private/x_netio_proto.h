@@ -14,22 +14,22 @@ namespace xcore
 {
 	namespace xp2p
 	{
-		struct io_buffer
-		{
-			xbyte*		data;
-			u32			size;
-		};
-
 		class io_reader
 		{
 		public:
-			virtual s32				read(io_buffer& buf) = 0;
+			/// returns:
+			///   >= 0, number of bytes read
+			///   <  0, error
+			virtual s32				read(xbyte* _buffer, u32 _size) = 0;
 		};
 
 		class io_writer
 		{
 		public:
-			virtual s32				write(io_buffer& buf) = 0;
+			/// returns:
+			///   >= 0, number of bytes written
+			///   <  0, error
+			virtual s32				write(xbyte const* _buffer, u32 _size) = 0;
 		};
 
 		typedef void*				io_connection;
@@ -37,7 +37,7 @@ namespace xcore
 		class io_protocol
 		{
 		public:
-			virtual io_connection	io_open(void*, xp2p::netip4) = 0;
+			virtual io_connection	io_open(xp2p::netip4) = 0;
 			virtual void			io_close(io_connection) = 0;
 
 			virtual bool			io_needs_write(io_connection) = 0;
