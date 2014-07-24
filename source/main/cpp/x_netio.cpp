@@ -152,7 +152,6 @@ namespace xcore
 			inline				ns_server()
 				: server_data(NULL)
 				, listening_sock()
-				, callback(NULL)
 				, allocator(NULL)
 				, protocol(NULL)
 				, num_active_connections(0)
@@ -161,7 +160,6 @@ namespace xcore
 
 			void*				server_data;
 			ns_socket_t			listening_sock;
-			ns_event*			callback;
 			ns_socket_t			ctl[2];
 			ns_allocator *		allocator;
 			io_protocol *		protocol;
@@ -255,7 +253,6 @@ namespace xcore
 
 		struct ctl_msg 
 		{
-			ns_event* callback;
 			char message[1024 * 8];
 		};
 
@@ -317,17 +314,17 @@ namespace xcore
 			return -1;
 		}
 				
-		static void ns_call(ns_connection * conn, ns_event::event ev, void *p) 
+		static void ns_call(ns_connection * conn, io_protocol::event ev, void *p) 
 		{
-			if (conn->server->callback!=NULL)
-				conn->server->callback->ns_callback(conn->io_connection_, ev, p);
+			if (conn->server->protocol!=NULL)
+				conn->server->protocol->io_callback(conn->io_connection_, ev, p);
 		}
 
 		static void ns_close_conn(ns_server * server, u32 conn_index)
 		{
 			DBG(("%p %d", conn, conn->flags));
 			ns_connection * conn = server->active_connections[conn_index];
-			ns_call(conn, ns_event::EVENT_CLOSE, NULL);
+			ns_call(conn, io_protocol::EVENT_CLOSE, NULL);
 			server->protocol->io_close(conn->io_connection_);
 			ns_remove_conn(server, conn_index);
 			closesocket(conn->sock.s);
@@ -553,7 +550,7 @@ namespace xcore
 					c->flags |= NSF_ACCEPTED;
 
 					ns_add_conn(server, c);
-					ns_call(c, ns_event::EVENT_ACCEPT, &sa);
+					ns_call(c, io_protocol::EVENT_ACCEPT, &sa);
 					DBG(("%p %d %p %p", c, c->sock, c->ssl, server->ssl_ctx));
 				}
 			}
@@ -644,7 +641,7 @@ namespace xcore
 				}
 				else
 				{
-					ns_call(_conn, ns_event::EVENT_CONNECT, &ok);
+					ns_call(_conn, io_protocol::EVENT_CONNECT, &ok);
 				}
 			}
 			else
@@ -713,7 +710,7 @@ namespace xcore
 			for (s32 i=0; i<server->num_active_connections; ) 
 			{
 				ns_connection * conn = server->active_connections[i];
-				ns_call(conn, ns_event::EVENT_POLL, &current_time);
+				ns_call(conn, io_protocol::EVENT_POLL, &current_time);
 				
 				if (xbfIsSet(conn->flags, NSF_CLOSE_IMMEDIATELY))
 				{
@@ -782,10 +779,6 @@ namespace xcore
 					ctl_msg ctl_msg;
 					s32 len = recv(server->ctl[1].s, (char *) &ctl_msg, sizeof(ctl_msg), 0);
 					send(server->ctl[1].s, ctl_msg.message, 1, 0);
-					if (len >= (s32) sizeof(ctl_msg.callback) && ctl_msg.callback != NULL) 
-					{
-						ns_server_foreach_connection(server, ctl_msg.callback, ctl_msg.message);
-					}
 				}
 
 				for (s32 i=0; i<server->num_active_connections; ) 
@@ -817,7 +810,7 @@ namespace xcore
 								xbfClear(conn->flags, NSF_CONNECTING);
 								xbfSet(conn->flags, NSF_CONNECTED);
 								s32 status = 1;
-								ns_call(conn, ns_event::EVENT_CONNECT, &status);
+								ns_call(conn, io_protocol::EVENT_CONNECT, &status);
 							} 
 
 							conn->last_io_time = current_time;
@@ -913,33 +906,32 @@ namespace xcore
 			return conn;
 		}
 
-		void ns_server_foreach_connection(ns_server *server, ns_event* cb, void *param)
+		void ns_server_foreach_connection(ns_server *server, void *param)
 		{
 			for (s32 i=0; i<server->num_active_connections; ++i) 
 			{
 				ns_connection * conn = server->active_connections[i];
-				cb->ns_callback(conn, ns_event::EVENT_POLL, param);
+				server->protocol->io_callback(conn, io_protocol::EVENT_POLL, param);
 			}
 		}
 
-		void ns_server_wakeup_ex(ns_server *server, ns_event* cb, void *data, u32 len) 
+		void ns_server_wakeup_ex(ns_server *server, void *data, u32 len) 
 		{
 			ctl_msg lctl_msg;
 			if (server->ctl[0].is_valid() && data != NULL && len < sizeof(lctl_msg.message)) 
 			{
-				lctl_msg.callback = cb;
 				memcpy(lctl_msg.message, data, len);
-				send(server->ctl[0].s, (char *) &lctl_msg, sizeof(ns_event*) + len, 0);
+				send(server->ctl[0].s, (char *) &lctl_msg, len, 0);
 				recv(server->ctl[0].s, (char *) &len, 1, 0);
 			}
 		}
 
 		void ns_server_wakeup(ns_server *server) 
 		{
-			ns_server_wakeup_ex(server, NULL, (void *) "", 0);
+			ns_server_wakeup_ex(server, (void *) "", 0);
 		}
 
-		void ns_server_init(ns_allocator * _allocator, ns_server *& server, io_protocol * protocol, void * server_data, ns_event* cb) 
+		void ns_server_init(ns_allocator * _allocator, ns_server *& server, io_protocol * protocol, void * server_data) 
 		{
 			void * ip_mem = _allocator->ns_allocate(sizeof(ns_server), sizeof(void*));
 			server = new (ip_mem) ns_server();
@@ -950,7 +942,6 @@ namespace xcore
 			server->ctl[0].clear();
 			server->ctl[1].clear();
 			server->server_data = server_data;
-			server->callback = cb;
 
 			{ WSADATA data; WSAStartup(MAKEWORD(2, 2), &data); }
 

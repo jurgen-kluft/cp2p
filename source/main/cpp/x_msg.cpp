@@ -60,9 +60,14 @@ namespace xcore
 			return size_;
 		}
 
-		const void*			message_block::get_data() const
+		xbyte*				message_block::get_data()
 		{
-			return data_;
+			return (xbyte*)data_;
+		}
+
+		const xbyte*			message_block::get_data() const
+		{
+			return (xbyte const*)data_;
 		}
 
 		/// ---------------------------------------------------------------------------------------

@@ -18,7 +18,7 @@ namespace xcore
 			virtual					~peer_registry() {}
 
 			virtual void			register_peer(ipeer* peer);
-			virtual bool			unregister_peer(peerid);
+			virtual bool			unregister_peer(ipeer* peer);
 			virtual ipeer*			find_peer_by_id(peerid) const;
 			virtual ipeer*			find_peer_by_ip(netip4) const;
 
@@ -46,11 +46,11 @@ namespace xcore
 			
 		}
 
-		bool			peer_registry::unregister_peer(peerid _id)
+		bool			peer_registry::unregister_peer(ipeer* peer)
 		{
 			for (s32 i = 0; i < num_peers_; ++i)
 			{
-				if (peers_[i]->get_id() == _id)
+				if (peers_[i] == peer)
 				{
 					peers_[i] = peers_[num_peers_ - 1];
 					--num_peers_;
@@ -60,19 +60,14 @@ namespace xcore
 			return false;
 		}
 
-		ipeer*			peer_registry::find_peer_by_id(peerid _id) const
+		ipeer*			peer_registry::find_peer_by_ip(netip4 ip) const
 		{
 			for (s32 i = 0; i < num_peers_; ++i)
 			{
-				if (peers_[i]->get_id() == _id)
+				if (peers_[i]->get_ip4() == ip)
 					return peers_[i];
 			}
 			return NULL;
-		}
-
-		ipeer*			peer_registry::find_peer_by_ip(netip4) const
-		{
-
 		}
 
 		void			peer_registry::release()
