@@ -7,15 +7,15 @@
 using namespace xcore;
 extern x_iallocator* gTestAllocator;
 
-class ns_test_allocator : public xcore::xnetio::ns_allocator
+class ns_test_allocator : public xcore::xp2p::ns_allocator
 {
 public:
-	virtual void*	alloc(u32 _size, u32 _alignment)
+	virtual void*	ns_allocate(u32 _size, u32 _alignment)
 	{
 		return gTestAllocator->allocate(_size, _alignment);
 	}
 
-	virtual void	dealloc(void* _old)
+	virtual void	ns_deallocate(void* _old)
 	{
 		gTestAllocator->deallocate(_old);
 	}

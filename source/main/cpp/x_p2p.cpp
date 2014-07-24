@@ -41,7 +41,7 @@ namespace xcore
 			netip4				endpoint_;
 		};
 
-		class node::node_imp : public peer, public io_protocol, public ns_event, public ns_allocator
+		class node::node_imp : public peer, public io_protocol, public ns_allocator
 		{
 		public:
 								node_imp(iallocator* _allocator, imessage_allocator* _message_allocator);
@@ -63,9 +63,6 @@ namespace xcore
 			void				event_wakeup();
 			bool				event_loop(incoming_messages*& _rcvd, outgoing_messages*& _sent, u32 _ms_to_wait);
 
-			// ns_event interface
-			virtual void		ns_callback(io_connection, event, void *evp);
-
 			// ns_allocator interface
 			virtual void*		ns_allocate(u32 _size, u32 _alignment);
 			virtual void		ns_deallocate(void* _old);
@@ -79,6 +76,8 @@ namespace xcore
 
 			virtual s32			io_write(io_connection, io_writer*);
 			virtual s32			io_read(io_connection, io_reader*);
+
+			virtual void		io_callback(io_connection, event, void *evp);
 
 			XCORE_CLASS_PLACEMENT_NEW_DELETE
 
@@ -638,7 +637,7 @@ namespace xcore
 
 		ipeer*	node::node_imp::start(netip4 _endpoint)
 		{
-			ns_server_init(this, server_, this, this, this);
+			ns_server_init(this, server_, this, this);
 			return this;
 		}
 
@@ -753,23 +752,23 @@ namespace xcore
 
 		// -------------------------------------------------------------------------------------------
 
-		void	node::node_imp::ns_callback(io_connection conn, event e, void *evp)
+		void	node::node_imp::io_callback(io_connection conn, event e, void *evp)
 		{
 			switch (e)
 			{
-				case ns_event::EVENT_POLL: 
+				case io_protocol::EVENT_POLL: 
 					break;
-				case ns_event::EVENT_ACCEPT: 
+				case io_protocol::EVENT_ACCEPT: 
 					{
 						peer_connection* pc = (peer_connection*)conn;
 						pc->set_status(ipeer::CONNECTED);
 					} break;
-				case ns_event::EVENT_CONNECT: 
+				case io_protocol::EVENT_CONNECT: 
 					{
 						peer_connection* pc = (peer_connection*)conn;
 						pc->set_status(ipeer::CONNECTED);
 					} break;
-				case ns_event::EVENT_CLOSE:
+				case io_protocol::EVENT_CLOSE:
 					{
 						peer_connection* pc = (peer_connection*)conn;
 						pc->set_status(ipeer::DISCONNECTED);
