@@ -42,7 +42,7 @@
 #endif
 
 #include <windows.h>
-#include <process.h>
+
 #ifndef EINPROGRESS
 #define EINPROGRESS WSAEINPROGRESS
 #endif
@@ -115,10 +115,7 @@ namespace xcore
 			SOCKET		s;
 		};
 
-		ns_connection*	ns_add_sock(ns_server *, ns_socket_t sock, void *p);
-
 		// Utility functions
-		void*			ns_start_thread(void *(*f)(void *), void *p);
 		s32				ns_socketpair(ns_socket_t [2]);
 		s32				ns_socketpair2(ns_socket_t [2], s32 sock_type);  // SOCK_STREAM or SOCK_DGRAM
 		void			ns_set_close_on_exec(ns_socket_t);
@@ -147,8 +144,9 @@ namespace xcore
 		}
 
 
-		struct ns_server
+		class ns_server : public ns_iserver
 		{
+		public:
 			inline				ns_server()
 				: server_data(NULL)
 				, listening_sock()
@@ -157,6 +155,35 @@ namespace xcore
 				, num_active_connections(0)
 			{
 			}
+
+			void				start(ns_allocator *, io_protocol *, void * server_data);
+			void				release();
+
+			s32					bind(const char * addr);
+			ns_connection*		connect(netip4 ip, void * connection_param);
+			void				disconnect(ns_connection*);
+
+			s32					poll(s32 milli);
+
+			void				wakeup();
+			void				wakeup_ex(void *, u32);
+
+			void				foreach_connection(void *param);
+
+			ns_connection*		accept_conn();
+			ns_connection*		create_connection();
+
+			ns_connection*		add_sock(ns_socket_t sock, void *p);
+			void				add_conn(ns_connection *c);
+			void				close_conn(u32 conn_index);
+			void				close_conn(ns_connection * conn);
+			s32					index_of(ns_connection *conn);
+			void				remove_conn(u32 ci);
+
+			s32					read_from_socket(ns_connection * _conn);
+			s32					write_to_socket(ns_connection * _conn);
+
+			void				callback(ns_connection * conn, io_protocol::event ev, void *p);
 
 			void*				server_data;
 			ns_socket_t			listening_sock;
@@ -169,6 +196,13 @@ namespace xcore
 
 			XCORE_CLASS_PLACEMENT_NEW_DELETE
 		};
+
+		ns_iserver*			ns_create_server(ns_allocator* _allocator)
+		{
+			void* mem = _allocator->ns_allocate(sizeof(ns_server), sizeof(void*));
+			ns_server* server = new (mem) ns_server();
+			return server;
+		}
 
 		class ns_connection : public io_writer, public io_reader
 		{
@@ -241,9 +275,9 @@ namespace xcore
 			XCORE_CLASS_PLACEMENT_NEW_DELETE
 		};
 
-		ns_connection * ns_create_connection(ns_server * server)
+		ns_connection * ns_server::create_connection()
 		{
-			void * conn_mem = server->allocator->ns_allocate(sizeof(ns_connection), sizeof(void*));
+			void * conn_mem = this->allocator->ns_allocate(sizeof(ns_connection), sizeof(void*));
 			if (conn_mem == NULL) 
 			{
 				return NULL;
@@ -257,28 +291,23 @@ namespace xcore
 		};
 
 
-		void *ns_start_thread(void *(*f)(void *), void *p)
+		void ns_server::add_conn(ns_connection *c) 
 		{
-			return (void *) _beginthread((void (__cdecl *)(void *)) f, 0, p);
-		}
-
-		static void ns_add_conn(ns_server *server, ns_connection *c) 
-		{
-			s32 const n = server->num_active_connections;
+			s32 const n = this->num_active_connections;
 			
 			// Sorted Insert
 			s32 i = 0;
-			while ((c < server->active_connections[i]) && (i < server->num_active_connections))
+			while ((c < this->active_connections[i]) && (i < this->num_active_connections))
 				++i;
 
 			s32 e = (n+1) - i;
 			while (e > i)
 			{
-				server->active_connections[e] = server->active_connections[e - 1];
+				this->active_connections[e] = this->active_connections[e - 1];
 				--e;
 			}
-			server->active_connections[i] = c;
-			server->num_active_connections++;
+			this->active_connections[i] = c;
+			this->num_active_connections++;
 
 			xp2p::netip4 netip;
 			netip.ip_.aip_[0] = c->sa.sin.sin_addr.S_un.S_un_b.s_b1;
@@ -286,27 +315,27 @@ namespace xcore
 			netip.ip_.aip_[2] = c->sa.sin.sin_addr.S_un.S_un_b.s_b3;
 			netip.ip_.aip_[3] = c->sa.sin.sin_addr.S_un.S_un_b.s_b4;
 			netip.port_ = c->sa.sin.sin_port;
-			c->io_connection_ = server->protocol->io_open(netip);
+			c->io_connection_ = this->protocol->io_open(netip);
 		}
 
-		static void ns_remove_conn(ns_server *server, u32 ci) 
+		void ns_server::remove_conn(u32 ci) 
 		{
-			s32 const n = server->num_active_connections;
+			s32 const n = this->num_active_connections;
 			s32 const m = n - ci - 1;
 
 			for (s32 i=ci; i<m; ++i)
 			{
-				server->active_connections[i] = server->active_connections[i+1];
+				this->active_connections[i] = this->active_connections[i+1];
 			}
-			--server->num_active_connections;
+			--this->num_active_connections;
 		}
 
-		static s32 ns_index_of(ns_server *server, ns_connection *conn) 
+		s32 ns_server::index_of(ns_connection *conn) 
 		{
-			s32 const n = server->num_active_connections;
+			s32 const n = this->num_active_connections;
 			for (s32 i=0; i<n; i++)
 			{
-				if (server->active_connections[i] = conn)
+				if (this->active_connections[i] = conn)
 				{
 					return i;
 				}
@@ -314,27 +343,27 @@ namespace xcore
 			return -1;
 		}
 				
-		static void ns_call(ns_connection * conn, io_protocol::event ev, void *p) 
+		void ns_server::callback(ns_connection * conn, io_protocol::event ev, void *p) 
 		{
-			if (conn->server->protocol!=NULL)
-				conn->server->protocol->io_callback(conn->io_connection_, ev, p);
+			if (this->protocol!=NULL)
+				this->protocol->io_callback(conn->io_connection_, ev, p);
 		}
 
-		static void ns_close_conn(ns_server * server, u32 conn_index)
+		void ns_server::close_conn(u32 conn_index)
 		{
 			DBG(("%p %d", conn, conn->flags));
-			ns_connection * conn = server->active_connections[conn_index];
-			ns_call(conn, io_protocol::EVENT_CLOSE, NULL);
-			server->protocol->io_close(conn->io_connection_);
-			ns_remove_conn(server, conn_index);
+			ns_connection * conn = this->active_connections[conn_index];
+			callback(conn, io_protocol::EVENT_CLOSE, NULL);
+			this->protocol->io_close(conn->io_connection_);
+			remove_conn(conn_index);
 			closesocket(conn->sock.s);
-			server->allocator->ns_deallocate(conn);
+			this->allocator->ns_deallocate(conn);
 		}
 
-		static void ns_close_conn(ns_server * server, ns_connection * conn)
+		void ns_server::close_conn(ns_connection * conn)
 		{
-			s32 i = ns_index_of(server, conn);
-			ns_close_conn(server, i);
+			s32 i = index_of(conn);
+			close_conn(i);
 		}
 
 		void ns_set_close_on_exec(sock_t sock)
@@ -358,7 +387,7 @@ namespace xcore
 		}
 
 #ifndef NS_DISABLE_SOCKETPAIR
-		s32 ns_socketpair2(ns_socket_t sp[2], s32 sock_type) 
+		static s32 ns_socketpair2(ns_socket_t sp[2], s32 sock_type) 
 		{
 			s32 ret = 0;
 
@@ -429,7 +458,7 @@ namespace xcore
 			return ret;
 		}
 
-		s32 ns_socketpair(ns_socket_t sp[2]) 
+		static s32 ns_socketpair(ns_socket_t sp[2]) 
 		{
 			return ns_socketpair2(sp, SOCK_STREAM);
 		}
@@ -514,17 +543,17 @@ namespace xcore
 		}
 
 
-		s32 ns_server_bind(ns_server *server, const char *str) 
+		s32 ns_server::bind(const char *str) 
 		{
 			socket_address sa;
 			ns_parse_port_string(str, &sa);
-			ns_close_sock(server->listening_sock);
-			server->listening_sock = ns_open_listening_socket(&sa);
-			return server->listening_sock.is_valid() ? (s32) ntohs(sa.sin.sin_port) : -1;
+			ns_close_sock(this->listening_sock);
+			this->listening_sock = ns_open_listening_socket(&sa);
+			return this->listening_sock.is_valid() ? (s32) ntohs(sa.sin.sin_port) : -1;
 		}
 
 
-		static ns_connection *accept_conn(ns_server *server)
+		ns_connection * ns_server::accept_conn()
 		{
 			ns_connection *c = NULL;
 
@@ -533,10 +562,10 @@ namespace xcore
 
 			// NOTE: on Windows, sock is always > FD_SETSIZE
 			ns_socket_t sock;
-			sock.s = accept(server->listening_sock.s, &sa.sa, &len);
+			sock.s = accept(this->listening_sock.s, &sa.sa, &len);
 			if (sock.is_valid()) 
 			{
-				c = ns_create_connection(server);
+				c = create_connection();
 				if (c == NULL || memset(c, 0, sizeof(*c)) == NULL) 
 				{
 					closesocket(sock.s);
@@ -545,12 +574,12 @@ namespace xcore
 				{
 					ns_set_close_on_exec(sock);
 					ns_set_non_blocking_mode(sock);
-					c->server = server;
+					c->server = this;
 					c->sock = (ns_socket_t)sock;
 					c->flags |= NSF_ACCEPTED;
 
-					ns_add_conn(server, c);
-					ns_call(c, io_protocol::EVENT_ACCEPT, &sa);
+					add_conn(c);
+					callback(c, io_protocol::EVENT_ACCEPT, &sa);
 					DBG(("%p %d %p %p", c, c->sock, c->ssl, server->ssl_ctx));
 				}
 			}
@@ -622,7 +651,7 @@ namespace xcore
 			return n;
 		}
 
-		static int ns_read_from_socket(ns_server * _server, ns_connection * _conn) 
+		int ns_server::read_from_socket(ns_connection * _conn) 
 		{
 			int result = 0;
 
@@ -641,19 +670,19 @@ namespace xcore
 				}
 				else
 				{
-					ns_call(_conn, io_protocol::EVENT_CONNECT, &ok);
+					callback(_conn, io_protocol::EVENT_CONNECT, &ok);
 				}
 			}
 			else
 			{
-				result = _server->protocol->io_read(_conn->io_connection_, _conn);
+				result = this->protocol->io_read(_conn->io_connection_, _conn);
 			}
 			return result;
 		}
 
-		static int ns_write_to_socket(ns_server * _server, ns_connection * _conn)
+		int ns_server::write_to_socket(ns_connection * _conn)
 		{
-			s32 result = _server->protocol->io_write(_conn->io_connection_, _conn);
+			s32 result = this->protocol->io_write(_conn->io_connection_, _conn);
 			DBG(("%p %d -> %d bytes", conn, conn->flags, result));
 			return result;
 		}
@@ -670,9 +699,9 @@ namespace xcore
 			}
 		}
 
-		s32 ns_server_poll(ns_server * server, s32 milli) 
+		s32 ns_server::poll(s32 milli) 
 		{
-			if (!server->listening_sock.is_valid() || server->num_active_connections == 0) 
+			if (!this->listening_sock.is_valid() || this->num_active_connections == 0) 
 				return 0;
 
 			sock_t max_fd = INVALID_SOCKET;
@@ -680,13 +709,13 @@ namespace xcore
 			FD_ZERO(&read_set);
 			FD_ZERO(&write_set);
 			FD_ZERO(&excp_set);
-			ns_add_to_set(server->listening_sock, &read_set, &max_fd);
-			ns_add_to_set(server->ctl[1], &read_set, &max_fd);
+			ns_add_to_set(this->listening_sock, &read_set, &max_fd);
+			ns_add_to_set(this->ctl[1], &read_set, &max_fd);
 
 			// Mark all the connections that need READ/WRITE
-			for (s32 i=0; i<server->num_active_connections; ++i) 
+			for (s32 i=0; i<this->num_active_connections; ++i) 
 			{
-				ns_connection* c = server->active_connections[i];
+				ns_connection* c = this->active_connections[i];
 
 				if (xbfIsSet(c->flags, NSF_CONNECTING))
 				{
@@ -694,11 +723,11 @@ namespace xcore
 				}
 				else
 				{
-					if (server->protocol->io_needs_read(c->io_connection_))
+					if (this->protocol->io_needs_read(c->io_connection_))
 					{
 						xbfSet(c->flags, NSF_WANT_READ);
 					}
-					if (server->protocol->io_needs_write(c->io_connection_))
+					if (this->protocol->io_needs_write(c->io_connection_))
 					{
 						xbfSet(c->flags, NSF_WANT_WRITE);
 					}
@@ -707,14 +736,14 @@ namespace xcore
 
 			// populate the read and write set for the 'select' poller
 			time_t current_time = time(NULL);
-			for (s32 i=0; i<server->num_active_connections; ) 
+			for (s32 i=0; i<this->num_active_connections; ) 
 			{
-				ns_connection * conn = server->active_connections[i];
-				ns_call(conn, io_protocol::EVENT_POLL, &current_time);
+				ns_connection * conn = this->active_connections[i];
+				callback(conn, io_protocol::EVENT_POLL, &current_time);
 				
 				if (xbfIsSet(conn->flags, NSF_CLOSE_IMMEDIATELY))
 				{
-					ns_close_conn(server, i);
+					close_conn(i);
 					// closing the connection will remove it from the active
 					// connections so we have do not increment the index.
 					continue;
@@ -761,12 +790,12 @@ namespace xcore
 				//        every call.
 
 				// Accept new connections
-				if (server->listening_sock.is_valid() && FD_ISSET(server->listening_sock.s, &read_set)) 
+				if (this->listening_sock.is_valid() && FD_ISSET(this->listening_sock.s, &read_set)) 
 				{
 					// We're not looping here, and accepting just one connection at
 					// a time. The reason is that eCos does not respect non-blocking
 					// flag on a listening socket and hangs in a loop.
-					ns_connection * conn = accept_conn(server);
+					ns_connection * conn = accept_conn();
 					if (conn != NULL) 
 					{
 						conn->last_io_time = current_time;
@@ -774,16 +803,16 @@ namespace xcore
 				}
 				 
 				// Read wakeup messages
-				if (server->ctl[1].is_valid() && FD_ISSET(server->ctl[1].s, &read_set)) 
+				if (this->ctl[1].is_valid() && FD_ISSET(this->ctl[1].s, &read_set)) 
 				{
 					ctl_msg ctl_msg;
-					s32 len = recv(server->ctl[1].s, (char *) &ctl_msg, sizeof(ctl_msg), 0);
-					send(server->ctl[1].s, ctl_msg.message, 1, 0);
+					s32 len = recv(this->ctl[1].s, (char *) &ctl_msg, sizeof(ctl_msg), 0);
+					send(this->ctl[1].s, ctl_msg.message, 1, 0);
 				}
 
-				for (s32 i=0; i<server->num_active_connections; ) 
+				for (s32 i=0; i<this->num_active_connections; ) 
 				{
-					ns_connection * conn = server->active_connections[i];
+					ns_connection * conn = this->active_connections[i];
 
 					if (xbfIsSet(conn->flags, NSF_CONNECTING))
 					{
@@ -800,7 +829,7 @@ namespace xcore
 						if (FD_ISSET(conn->sock.s, &read_set)) 
 						{
 							conn->last_io_time = current_time;
-							ns_read_from_socket(server, conn);
+							read_from_socket(conn);
 						}
 
 						if (FD_ISSET(conn->sock.s, &write_set))
@@ -810,23 +839,23 @@ namespace xcore
 								xbfClear(conn->flags, NSF_CONNECTING);
 								xbfSet(conn->flags, NSF_CONNECTED);
 								s32 status = 1;
-								ns_call(conn, io_protocol::EVENT_CONNECT, &status);
+								callback(conn, io_protocol::EVENT_CONNECT, &status);
 							} 
 
 							conn->last_io_time = current_time;
-							ns_write_to_socket(server, conn);
+							write_to_socket(conn);
 						}
 					}
 				}
 			}
 
-			for (s32 i=0; i<server->num_active_connections; ) 
+			for (s32 i=0; i<this->num_active_connections; ) 
 			{
-				ns_connection * conn = server->active_connections[i];
+				ns_connection * conn = this->active_connections[i];
 
 				if (conn->flags & NSF_CLOSE_IMMEDIATELY) 
 				{
-					ns_close_conn(server, i);
+					close_conn(i);
 				}
 				else
 				{
@@ -835,10 +864,10 @@ namespace xcore
 			}
 			//DBG(("%d active connections", num_active_connections));
 
-			return server->num_active_connections;
+			return this->num_active_connections;
 		}
 
-		ns_connection * ns_connect(ns_server *server, netip4 netip, void *param) 
+		ns_connection * ns_server::connect(netip4 netip, void *param) 
 		{
 			ns_socket_t sock;
 			sockaddr_in sin;
@@ -854,7 +883,7 @@ namespace xcore
 
 			// ! connect in non-blocking mode
 			ns_set_non_blocking_mode(sock);
-			s32 connect_ret_val = connect(sock.s, (sockaddr *) &sin, sizeof(sin));
+			s32 connect_ret_val = ::connect(sock.s, (sockaddr *) &sin, sizeof(sin));
 			if (ns_is_error(connect_ret_val)) 
 			{
 				closesocket(sock.s);
@@ -862,7 +891,7 @@ namespace xcore
 			}
 			else 
 			{
-				conn = ns_create_connection(server);
+				conn = create_connection();
 				if (conn == NULL) 
 				{
 					closesocket(sock.s);
@@ -871,106 +900,103 @@ namespace xcore
 			}
 
 			memset(conn, 0, sizeof(*conn));
-			conn->server = server;
+			conn->server = this;
 			conn->sock = sock;
 			conn->connection_data = param;
 			conn->flags = NSF_CONNECTING;
 			conn->last_io_time = time(NULL);
 
-			ns_add_conn(server, conn);
+			add_conn(conn);
 			DBG(("%p %s:%d %d %p", conn, host, port, conn->sock, conn->ssl));
 
 			return conn;
 		}
 
-		void	ns_disconnect(ns_server * server, ns_connection* conn)
+		void	ns_server::disconnect(ns_connection* conn)
 		{
 			conn->flags |= NSF_CLOSE_IMMEDIATELY;
 		}
 
 
-		ns_connection * ns_add_sock(ns_server *s, ns_socket_t sock, void *p) 
+		ns_connection * ns_server::add_sock(ns_socket_t sock, void *p)
 		{
-			ns_connection *conn = ns_create_connection(s);
+			ns_connection *conn = create_connection();
 			if (conn != NULL)
 			{
 				memset(conn, 0, sizeof(*conn));
 				ns_set_non_blocking_mode(sock);
 				conn->sock = sock;
 				conn->connection_data = p;
-				conn->server = s;
+				conn->server = this;
 				conn->last_io_time = time(NULL);
-				ns_add_conn(s, conn);
+				add_conn(conn);
 				DBG(("%p %d", conn, sock));
 			}
 			return conn;
 		}
 
-		void ns_server_foreach_connection(ns_server *server, void *param)
+		void ns_server::foreach_connection(void *param)
 		{
-			for (s32 i=0; i<server->num_active_connections; ++i) 
+			for (s32 i=0; i<this->num_active_connections; ++i) 
 			{
-				ns_connection * conn = server->active_connections[i];
-				server->protocol->io_callback(conn, io_protocol::EVENT_POLL, param);
+				ns_connection * conn = this->active_connections[i];
+				this->protocol->io_callback(conn, io_protocol::EVENT_POLL, param);
 			}
 		}
 
-		void ns_server_wakeup_ex(ns_server *server, void *data, u32 len) 
+		void ns_server::wakeup_ex(void *data, u32 len) 
 		{
 			ctl_msg lctl_msg;
-			if (server->ctl[0].is_valid() && data != NULL && len < sizeof(lctl_msg.message)) 
+			if (this->ctl[0].is_valid() && data != NULL && len < sizeof(lctl_msg.message)) 
 			{
 				memcpy(lctl_msg.message, data, len);
-				send(server->ctl[0].s, (char *) &lctl_msg, len, 0);
-				recv(server->ctl[0].s, (char *) &len, 1, 0);
+				send(this->ctl[0].s, (char *) &lctl_msg, len, 0);
+				recv(this->ctl[0].s, (char *) &len, 1, 0);
 			}
 		}
 
-		void ns_server_wakeup(ns_server *server) 
+		void ns_server::wakeup() 
 		{
-			ns_server_wakeup_ex(server, (void *) "", 0);
+			ns_server::wakeup_ex((void *) "", 0);
 		}
 
-		void ns_server_init(ns_allocator * _allocator, ns_server *& server, io_protocol * protocol, void * server_data) 
+		void ns_server::start(ns_allocator * _allocator, io_protocol * protocol, void * server_data) 
 		{
 			void * ip_mem = _allocator->ns_allocate(sizeof(ns_server), sizeof(void*));
-			server = new (ip_mem) ns_server();
-			server->allocator = _allocator;
-			server->protocol = protocol;
+			this->allocator = _allocator;
+			this->protocol = protocol;
 
-			server->listening_sock.clear();
-			server->ctl[0].clear();
-			server->ctl[1].clear();
-			server->server_data = server_data;
+			this->listening_sock.clear();
+			this->ctl[0].clear();
+			this->ctl[1].clear();
+			this->server_data = server_data;
 
 			{ WSADATA data; WSAStartup(MAKEWORD(2, 2), &data); }
 
 			do 
 			{
-				ns_socketpair2(server->ctl, SOCK_DGRAM);
-			} while (!server->ctl[0].is_valid());
+				ns_socketpair2(this->ctl, SOCK_DGRAM);
+			} while (!this->ctl[0].is_valid());
 
 		}
 
-		void ns_server_free(ns_server * s) 
+		void ns_server::release() 
 		{
-			DBG(("%p", s));
-			if (s == NULL) 
-				return;
+			DBG(("%p", this));
 
 			// Do one last poll, see https://github.com/cesanta/mongoose/issues/286
-			ns_server_poll(s, 0);
+			poll(0);
 
-			ns_close_sock(s->listening_sock);
-			ns_close_sock(s->ctl[0]);
-			ns_close_sock(s->ctl[1]);
+			ns_close_sock(this->listening_sock);
+			ns_close_sock(this->ctl[0]);
+			ns_close_sock(this->ctl[1]);
 
-			for (s32 i=0; i<s->num_active_connections; ++i) 
+			for (s32 i=0; i<this->num_active_connections; ++i) 
 			{
-				ns_close_conn(s, i);
+				close_conn(i);
 			}
 
-			s->allocator->ns_deallocate(s);
+			this->allocator->ns_deallocate(this);
 		}
 
 	}

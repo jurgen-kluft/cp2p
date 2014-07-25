@@ -7,7 +7,7 @@
 
 UNITTEST_SUITE_LIST(xP2PUnitTest);
 
-UNITTEST_SUITE_DECLARE(xP2PUnitTest, x_netmsg);
+UNITTEST_SUITE_DECLARE(xP2PUnitTest, msg);
 
 namespace xcore
 {

@@ -26,10 +26,10 @@ namespace xcore
 		class node
 		{
 		public:
-								node(iallocator* _allocator, imessage_allocator* _message_allocator);
+								node();
 								~node();
 
-			ipeer*				start(netip4 endpoint);
+			ipeer*				start(netip4 endpoint, iallocator* _allocator, imessage_allocator* _message_allocator);
 			void				stop();
 
 			ipeer*				register_peer(netip4 endpoint);
@@ -45,9 +45,6 @@ namespace xcore
 			bool				event_loop(incoming_messages*& _received, outgoing_messages*& _sent, u32 _ms_to_wait = 0);
 
 		protected:
-			iallocator*			allocator_;
-			imessage_allocator*	message_allocator_;
-
 			class node_imp;
 			node_imp*			imp_;
 		};

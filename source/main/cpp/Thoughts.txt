@@ -1,0 +1,73 @@
+
+namespace binstore
+{
+	class chunk
+	{
+	public:
+
+	protected:
+		u8			hash_[32];
+		u32			size_;
+		u32			size_compressed_;
+		u64			offset_;
+
+		u32			dummy[4];
+	};
+
+	class binfile
+	{
+	public:
+
+	protected:
+		u16			index_;
+		u32			size_;
+
+		s32			nchunks_;
+		chunk*		chunks_;	// memory mappped ?
+	};
+
+	class user
+	{
+	public:
+		u32			id_;
+		u8			hash_[32];
+
+		s32			nbinfiles_;
+		binfile*	binfiles_;
+	};
+
+	class project
+	{
+	public:
+		u8			hash_[32];
+
+		s32			nusers_;
+		user*		users_;
+	};
+
+	class download
+	{
+	public:
+
+	protected:
+		u32			id_;
+		u32			download_size_;
+		u16			bin_index_;
+		u32			bin_offset_;
+	};
+
+	class manager
+	{
+	public:
+		
+
+	protected:
+		project*	local_;
+
+		s32			nremotes_;
+		project*	remotes_;
+	};
+
+
+
+}

@@ -13,15 +13,6 @@ namespace xcore
 {
 	namespace xp2p
 	{
-		x_iallocator* gCreateHeapAllocator(void* mem, u32 memSize)
-		{
-			return NULL;
-		}
-
-		static void gEndPointToStr(netip4 ip, char* outString, u32 inStringMaxLen)
-		{
-		}
-
 		enum emessage_flags
 		{
 			MSG_FLAG_ANNOUNCE = 1,
@@ -87,8 +78,7 @@ namespace xcore
 			{
 				void* message_mem = mOurAllocator->allocate(_size, sizeof(void*));
 				void* block_mem = mOurAllocator->allocate(sizeof(message_block), sizeof(void*));
-				message_block* msg_block = new (block_mem) message_block(message_mem, _size);
-				msg_block->set_flags(_flags);
+				message_block* msg_block = new (block_mem) message_block(message_mem, _size, _flags);
 				return msg_block;
 			}
 
@@ -136,9 +126,9 @@ namespace xcore
 
 			if (start_as_peer)
 			{
-				xp2p::node system(ourSystemAllocator, ourMessageAllocator);
+				xp2p::node system;
 				xp2p::node* node = &system;
-				ipeer* host = node->start(netip4().set_port(51888));
+				ipeer* host = node->start(netip4().set_port(51888), ourSystemAllocator, ourMessageAllocator);
 
 				// Let's connect to the tracker 
 				ipeer* tracker = node->register_peer(netip4(10, 0, 14, 14).set_port(51888));
@@ -214,12 +204,12 @@ namespace xcore
 			else
 			{
 				// Start as Tracker
-				xp2p::node system(ourSystemAllocator, ourMessageAllocator);
+				xp2p::node system;
 				xp2p::node* node = &system;
 
 				// Let's boot as a tracker which always has peerid '0'
 				netip4 tracker_ep = netip4().set_port(51888);
-				ipeer* tracker = node->start(tracker_ep);
+				ipeer* tracker = node->start(tracker_ep, ourSystemAllocator, ourMessageAllocator);
 
 				incoming_messages* rcvd_messages;
 				outgoing_messages* sent_messages;

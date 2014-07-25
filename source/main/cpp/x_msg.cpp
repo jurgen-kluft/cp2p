@@ -62,12 +62,12 @@ namespace xcore
 
 		xbyte*				message_block::get_data()
 		{
-			return (xbyte*)data_;
+			return data_;
 		}
 
-		const xbyte*			message_block::get_data() const
+		const xbyte*		message_block::get_data() const
 		{
-			return (xbyte const*)data_;
+			return data_;
 		}
 
 		/// ---------------------------------------------------------------------------------------
@@ -101,7 +101,7 @@ namespace xcore
 		{
 			if (_can_read(block_, cursor_, 1))
 			{
-				xbyte const* ptr = (xbyte const*)block_->get_data() + cursor_;
+				u8 const* ptr = (u8 const*)block_->get_data() + cursor_;
 				cursor_ += 1;
 				b = read_u8(ptr) != 0;
 				return 1;
@@ -302,114 +302,128 @@ namespace xcore
 		}
 
 
-		void				message_writer::write(bool b)
+		u32					message_writer::write(bool b)
 		{
 			if (_can_write(block_, cursor_, 1))
 			{
 				write_u8((xbyte*)block_->get_data() + cursor_, b ? 1 : 0);
 				cursor_ += 1;
+				return 1;
 			}
+			return 0;
 		}
 
-		void				message_writer::write(u8   b)
+		u32					message_writer::write(u8   b)
 		{
 			if (_can_write(block_, cursor_, sizeof(b)))
 			{
 				write_u8((xbyte*)block_->get_data() + cursor_, b);
 				cursor_ += sizeof(b);
+				return sizeof(b);
 			}
+			return 0;
 		}
 
-		void				message_writer::write(s8   b)
+		u32					message_writer::write(s8   b)
 		{
 			if (_can_write(block_, cursor_, sizeof(b)))
 			{
 				write_u8((xbyte*)block_->get_data() + cursor_, b);
 				cursor_ += sizeof(b);
+				return sizeof(b);
 			}
-			write_u8((xbyte*)block_->get_data() + cursor_, b);
+			return 0;
 		}
 
-		void				message_writer::write(u16  b)
+		u32					message_writer::write(u16  b)
 		{
 			if (_can_write(block_, cursor_, sizeof(b)))
 			{
 				write_u16((xbyte*)block_->get_data() + cursor_, b);
 				cursor_ += sizeof(b);
+				return sizeof(b);
 			}
-			write_u16((xbyte*)block_->get_data() + cursor_, b);
+			return 0;
 		}
 
-		void				message_writer::write(s16  b)
+		u32					message_writer::write(s16  b)
 		{
 			if (_can_write(block_, cursor_, sizeof(b)))
 			{
 				write_s16((xbyte*)block_->get_data() + cursor_, b);
 				cursor_ += sizeof(b);
 			}
-			write_s16((xbyte*)block_->get_data() + cursor_, b);
+			return sizeof(b);
 		}
 
-		void				message_writer::write(u32  b)
+		u32					message_writer::write(u32  b)
 		{
 			if (_can_write(block_, cursor_, sizeof(b)))
 			{
 				write_u32((xbyte*)block_->get_data() + cursor_, b);
 				cursor_ += sizeof(b);
+				return sizeof(b);
 			}
-			write_u32((xbyte*)block_->get_data() + cursor_, b);
+			return 0;
 		}
 
-		void				message_writer::write(s32  b)
+		u32					message_writer::write(s32  b)
 		{
 			if (_can_write(block_, cursor_, sizeof(b)))
 			{
 				write_s32((xbyte*)block_->get_data() + cursor_, b);
 				cursor_ += sizeof(b);
+				return sizeof(b);
 			}
-			write_s32((xbyte*)block_->get_data() + cursor_, b);
+			return 0;
 		}
 
-		void				message_writer::write(u64  b)
+		u32					message_writer::write(u64  b)
 		{
 			if (_can_write(block_, cursor_, sizeof(b)))
 			{
 				write_u64((xbyte*)block_->get_data() + cursor_, b);
 				cursor_ += sizeof(b);
+				return sizeof(b);
 			}
-			write_u64((xbyte*)block_->get_data() + cursor_, b);
+			return 0;
 		}
 
-		void				message_writer::write(s64  b)
+		u32					message_writer::write(s64  b)
 		{
 			if (_can_write(block_, cursor_, sizeof(b)))
 			{
 				write_s64((xbyte*)block_->get_data() + cursor_, b);
 				cursor_ += sizeof(b);
+				return sizeof(b);
 			}
-			write_s64((xbyte*)block_->get_data() + cursor_, b);
+			return 0;
 		}
 
-		void				message_writer::write(f32  b)
+		u32					message_writer::write(f32  b)
 		{
 			if (_can_write(block_, cursor_, sizeof(b)))
 			{
 				write_f32((xbyte*)block_->get_data() + cursor_, b);
 				cursor_ += sizeof(b);
+				return sizeof(b);
 			}
+			return 0;
 		}
 
-		void				message_writer::write(f64  b)
+		u32					message_writer::write(f64  b)
 		{
 			if (_can_write(block_, cursor_, sizeof(b)))
 			{
 				write_f64((xbyte*)block_->get_data() + cursor_, b);
 				cursor_ += sizeof(b);
+				return sizeof(b);
 			}
+			return 0;
 		}
 
 
-		void				message_writer::write_data(const xbyte* _data, u32 _size)
+		u32					message_writer::write_data(const xbyte* _data, u32 _size)
 		{
 			if (_can_write(block_, cursor_, _size))
 			{
@@ -417,10 +431,12 @@ namespace xcore
 				for (u32 i=0; i<_size; i++)
 					*dst++ = *_data++;
 				cursor_ += _size;
+				return _size;
 			}
+			return 0;
 		}
 
-		void				message_writer::write_string(const char* _str, u32 _len)
+		u32					message_writer::write_string(const char* _str, u32 _len)
 		{
 			if (_can_write(block_, cursor_, _len))
 			{
@@ -428,7 +444,9 @@ namespace xcore
 				for (u32 i=0; i<_len; i++)
 					*dst++ = *_str++;
 				cursor_ += _len;
+				return _len;
 			}
+			return 0;
 		}
 
 		void				message_writer::next_block()
@@ -470,7 +488,7 @@ namespace xcore
 
 		bool				message::has_data() const
 		{
-			return xbfIsSet(flags_, MESSAGE_FLAG_DATA);
+			return nblocks_>0;
 		}
 
 
