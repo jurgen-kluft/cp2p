@@ -19,7 +19,6 @@ namespace xcore
 
 			virtual void			register_peer(ipeer* peer);
 			virtual bool			unregister_peer(ipeer* peer);
-			virtual ipeer*			find_peer_by_id(peerid) const;
 			virtual ipeer*			find_peer_by_ip(netip4) const;
 
 			virtual void			release();

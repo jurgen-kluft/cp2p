@@ -19,22 +19,28 @@ namespace xcore
 		};
 
 		// Forward declares
-		struct ns_server;
 		class ns_connection;
 		class io_protocol;
 
-		void			ns_server_init(ns_allocator *, ns_server *&, io_protocol * , void * server_data);
-		s32				ns_server_bind(ns_server *, const char * addr);
-		void			ns_server_free(ns_server *);
-		
-		s32				ns_server_poll(ns_server *, s32 milli);
+		class ns_iserver
+		{
+		public:
+			virtual void			start(ns_allocator *, io_protocol *, void * server_data) = 0;
+			virtual void			release() = 0;
 
-		ns_connection*	ns_connect(ns_server *, netip4 ip, void * connection_param);
-		void			ns_disconnect(ns_server *, ns_connection*);
+			virtual s32				bind(const char * addr) = 0;
+			virtual ns_connection*	connect(netip4 ip, void * connection_param) = 0;
+			virtual void			disconnect(ns_connection*) = 0;
 
-		void			ns_server_wakeup(ns_server *);
-		void			ns_server_wakeup_ex(ns_server *, void *, u32);
-		void			ns_server_foreach_connection(ns_server *, void *param);
+			virtual s32				poll(s32 milli) = 0;
+
+			virtual void			wakeup() = 0;
+			virtual void			wakeup_ex(void *, u32) = 0;
+
+			virtual void			foreach_connection(void *param) = 0;
+		};
+
+		ns_iserver*			ns_create_server(ns_allocator*);
 	}
 }
 

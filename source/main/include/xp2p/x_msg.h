@@ -25,8 +25,8 @@ namespace xcore
 		{
 		public:
 			inline				message_block() : lqueue(this), flags_(0), size_(0), data_(NULL), const_data_(NULL) { }
-			inline				message_block(void* _data, u32 _size) : lqueue(this), flags_(0), size_(_size), data_(_data), const_data_(NULL) {}
-			inline				message_block(void const* _data, u32 _size) : lqueue(this), flags_(0), size_(_size), data_(NULL), const_data_(_data) {}
+			inline				message_block(void* _data, u32 _size, u32 _flags) : lqueue(this), flags_(_flags), size_(_size), data_((xbyte*)_data), const_data_(NULL) {}
+			inline				message_block(void const* _data, u32 _size, u32 _flags) : lqueue(this), flags_(_flags), size_(_size), data_(NULL), const_data_((xbyte const*)_data) {}
 
 			u32					get_flags() const;
 			void				set_flags(u32 _flags);
@@ -40,8 +40,8 @@ namespace xcore
 		protected:
 			u32					flags_;
 			u32					size_;
-			void*				data_;
-			void const*			const_data_;
+			xbyte*				data_;
+			xbyte const*		const_data_;
 		};
 
 		class message_reader
@@ -84,33 +84,32 @@ namespace xcore
 		class message_writer
 		{
 		public:
-			inline				message_writer(message_block* _block) : cursor_(0), block_(_block) {}
+			inline				message_writer(message_block* _block) : cursor_(0), block_(_block) { }
 
 			void				set_cursor(u32);
 			u32					get_cursor() const;
 
 			bool				can_write(u32 num_bytes = 0) const;
 
-			void				write(bool);
-			void				write(u8  );
-			void				write(s8  );
-			void				write(u16 );
-			void				write(s16 );
-			void				write(u32 );
-			void				write(s32 );
-			void				write(u64 );
-			void				write(s64 );
-			void				write(f32 );
-			void				write(f64 );
+			u32					write(bool);
+			u32					write(u8  );
+			u32					write(s8  );
+			u32					write(u16 );
+			u32					write(s16 );
+			u32					write(u32 );
+			u32					write(s32 );
+			u32					write(u64 );
+			u32					write(s64 );
+			u32					write(f32 );
+			u32					write(f64 );
 
-			void				write_data(const xbyte*, u32);
-			void				write_string(const char*, u32 _len=0);
+			u32					write_data(const xbyte*, u32);
+			u32					write_string(const char*, u32 _len=0);
 
 			void				next_block();
 
 		protected:
 			u32					cursor_;
-			xbyte*				data_;
 			message_block*		block_;
 		};
 
@@ -123,8 +122,6 @@ namespace xcore
 			enum eflags
 			{
 				MESSAGE_FLAG_EVENT = 0x80000000,
-				MESSAGE_FLAG_DATA = 0x40000000,
-
 				MESSAGE_FLAG_EVENT_MASK = 0x0000000f,
 				MESSAGE_FLAG_EVENT_CANNOT_CONNECT = 0x00000000,
 				MESSAGE_FLAG_EVENT_CONNECTED = 0x00000001,
@@ -133,10 +130,9 @@ namespace xcore
 
 			ipeer*				get_from() const;
 			ipeer*				get_to() const;
-			u32					get_flags() const;
-
 			bool				is_from(ipeer*) const;
 
+			u32					get_flags() const;
 			bool				has_event() const;
 			bool				has_data() const;
 

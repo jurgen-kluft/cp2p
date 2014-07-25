@@ -83,7 +83,7 @@ namespace xcore
 
 			iallocator*			allocator_;
 			imessage_allocator*	message_allocator_;
-			ns_server*			server_;
+			ns_iserver*			server_;
 			
 			lqueue<peer_connection>* inactive_peers_;
 			lqueue<peer_connection>* active_peers_;
@@ -637,13 +637,14 @@ namespace xcore
 
 		ipeer*	node::node_imp::start(netip4 _endpoint)
 		{
-			ns_server_init(this, server_, this, this);
+			server_ = ns_create_server(this);
+			server_->start(this, this, this);
 			return this;
 		}
 
 		void	node::node_imp::stop()
 		{
-			ns_server_free(server_);
+			server_->release();
 		}
 
 		peer_connection*	_find_peer(lqueue<peer_connection>* _peers, netip4 _endpoint)
@@ -701,15 +702,14 @@ namespace xcore
 			if (p->connection_ == NULL)
 			{
 				p->set_status(ipeer::CONNECT);
-				p->connection_ = ns_connect(server_, _peer->get_ip4(), (void*)_peer);
-
+				p->connection_ = server_->connect(_peer->get_ip4(), (void*)_peer);
 			}
 		}
 
 		void	node::node_imp::disconnect_from(ipeer* _peer)
 		{
 			peer_connection* p = (peer_connection*) _peer;
-			ns_disconnect(server_, p->connection_);
+			server_->disconnect(p->connection_);
 			p->set_status(ipeer::DISCONNECTING);
 		}
 
@@ -741,12 +741,12 @@ namespace xcore
 
 		void	node::node_imp::event_wakeup()
 		{
-			ns_server_wakeup(server_);
+			server_->wakeup();
 		}
 
 		bool	node::node_imp::event_loop(incoming_messages*&, outgoing_messages*& _sent, u32 _ms_to_wait)
 		{
-			s32 const num_connections = ns_server_poll(server_, _ms_to_wait);
+			s32 const num_connections = server_->poll(_ms_to_wait);
 			return true;
 		}
 
@@ -762,16 +762,31 @@ namespace xcore
 					{
 						peer_connection* pc = (peer_connection*)conn;
 						pc->set_status(ipeer::CONNECTED);
+
+						u32 const flags = (message::MESSAGE_FLAG_EVENT) | (message::MESSAGE_FLAG_EVENT_CONNECTED);
+						message* msg = message_allocator_->allocate(this, pc, flags);
+						incoming_messages_.enqueue(msg);
+
 					} break;
 				case io_protocol::EVENT_CONNECT: 
 					{
 						peer_connection* pc = (peer_connection*)conn;
 						pc->set_status(ipeer::CONNECTED);
+
+						u32 const flags = (message::MESSAGE_FLAG_EVENT) | (message::MESSAGE_FLAG_EVENT_CONNECTED);
+						message* msg = message_allocator_->allocate(this, pc, flags);
+						incoming_messages_.enqueue(msg);
+
 					} break;
 				case io_protocol::EVENT_CLOSE:
 					{
 						peer_connection* pc = (peer_connection*)conn;
 						pc->set_status(ipeer::DISCONNECTED);
+
+						u32 const flags = (message::MESSAGE_FLAG_EVENT) | (message::MESSAGE_FLAG_EVENT_DISCONNECTED);
+						message* msg = message_allocator_->allocate(this, pc, flags);
+						incoming_messages_.enqueue(msg);
+
 					} break;
 			}
 		}
@@ -831,23 +846,22 @@ namespace xcore
 		// P2P Node
 		// -------------------------------------------------------------------------------------------
 
-		node::node(iallocator* _allocator, imessage_allocator* _message_allocator) 
-			: allocator_(_allocator)
-			, message_allocator_(_message_allocator)
-			, imp_(NULL)
+		node::node() 
+			: imp_(NULL)
 		{
 		}
 
-		ipeer*				node::start(netip4 _endpoint)
+		ipeer*				node::start(netip4 _endpoint, iallocator* _allocator, imessage_allocator* _message_allocator)
 		{
-			void * mem = allocator_->allocate(sizeof(node::node_imp), sizeof(void*));
-			imp_ = new (mem) node::node_imp(allocator_, message_allocator_);
+			void * mem = _allocator->allocate(sizeof(node::node_imp), sizeof(void*));
+			imp_ = new (mem) node::node_imp(_allocator, _message_allocator);
 			return imp_->start(_endpoint);
 		}
 
 		void				node::stop()
 		{
 			imp_->stop();
+
 		}
 
 		ipeer*				node::register_peer(netip4 _endpoint)
