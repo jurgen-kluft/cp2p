@@ -134,7 +134,11 @@ namespace xcore
 				ipeer* tracker = node->register_peer(netip4(10, 0, 14, 14).set_port(51888));
 				node->connect_to(tracker);
 
+				// Let's register the LAN multi-cast node
+				ipeer* lpd = node->register_peer(netip4(239, 192, 152, 143).set_port(6771));
+
 				incoming_messages* rcvd_messages;
+				outgoing_messages out_messages;
 				outgoing_messages* sent_messages;
 				while (tracker != NULL)
 				{
@@ -142,31 +146,34 @@ namespace xcore
 					{
 						while (rcvd_messages->has_message())
 						{
-							if (rcvd_messages->is_from(tracker))
+							message* rcvdmsg = rcvd_messages->dequeue();
+
+							if (rcvdmsg->is_from(tracker))
 							{
-								if (rcvd_messages->has_event())
+								if (rcvdmsg->has_event())
 								{
-									if (rcvd_messages->event_is_connected())
+									if (rcvdmsg->event_is_connected())
 									{
-										message* tmsg = ourMessageAllocator->allocate(tracker, rcvd_messages->get_from(), MSG_FLAG_ANNOUNCE, 40);
-										message_writer writer = tmsg->get_writer();
+										message* msg2send = ourMessageAllocator->allocate(tracker, rcvdmsg->get_from(), MSG_FLAG_ANNOUNCE, 40);
+										message_writer writer = msg2send->get_writer();
 										writer.write_string("Hello tracker, how are you?");
+										out_messages.enqueue(msg2send);
 									}
-									else if (rcvd_messages->event_disconnected())
+									else if (rcvdmsg->event_disconnected())
 									{
 										// Remote peer has disconnected or cannot connect
 										break;
 									}
 								}
 								
-								if (rcvd_messages->has_data())
+								if (rcvdmsg->has_data())
 								{
-									message_reader reader = rcvd_messages->get_reader();
+									message_reader reader = rcvdmsg->get_reader();
 
 									char ip4_str[32];
 									tracker->get_ip4().to_string(ip4_str, sizeof(ip4_str));
 
-									if (xbfIsSet(rcvd_messages->get_flags(), MSG_FLAG_ANNOUNCE))
+									if (xbfIsSet(rcvdmsg->get_flags(), MSG_FLAG_ANNOUNCE))
 									{
 										///@ actually we should be getting our peer-id from the message
 									}
@@ -182,9 +189,12 @@ namespace xcore
 								/// break;
 							}
 
-							message* msg = rcvd_messages->dequeue();
-							ourMessageAllocator->deallocate(msg);
+							// release received message back to the allocator
+							ourMessageAllocator->deallocate(rcvdmsg);
 						}
+
+						// send all messages created in this iteration
+						node->send(out_messages);
 
 						// release all messages that where sent
 						while (sent_messages->has_message())
@@ -215,27 +225,31 @@ namespace xcore
 				outgoing_messages* sent_messages;
 				while (tracker != NULL)
 				{
+					outgoing_messages out_messages;
+
 					if (node->event_loop(rcvd_messages, sent_messages, 1000))	// Wait a maximum of 1000 ms
 					{
 						while (rcvd_messages->has_message())
 						{
-							ipeer* peer = rcvd_messages->get_from();
-							if (rcvd_messages->has_event())
+							message* rcvdmsg = rcvd_messages->dequeue();
+
+							ipeer* peer = rcvdmsg->get_from();
+							if (rcvdmsg->has_event())
 							{
-								if (rcvd_messages->event_is_connected())
+								if (rcvdmsg->event_is_connected())
 								{
 									// Remote peer has connected
 								}
-								else if (rcvd_messages->event_disconnected())
+								else if (rcvdmsg->event_disconnected())
 								{
 									// Remote peer has disconnected or cannot connect
 									break;
 								}
 							}
 							
-							if (rcvd_messages->has_data())
+							if (rcvdmsg->has_data())
 							{
-								message_reader reader = rcvd_messages->get_reader();
+								message_reader reader = rcvdmsg->get_reader();
 								char ip4_str[32];
 								peer->get_ip4().to_string(ip4_str, sizeof(ip4_str));
 
@@ -246,12 +260,16 @@ namespace xcore
 								x_printf("info: message \"%s\"received from peer \"%s\"", x_va_list(x_va((const char*)msgString), x_va(ip4_str)));
 
 								// Send back a message
-								message* tmsg = ourMessageAllocator->allocate(tracker, rcvd_messages->get_from(), MSG_FLAG_ANNOUNCE, 40);
+								message* tmsg = ourMessageAllocator->allocate(tracker, rcvdmsg->get_from(), MSG_FLAG_ANNOUNCE, 40);
 								message_writer writer = tmsg->get_writer();
 								writer.write_string("Hello peer, i am fine!");
+								out_messages.enqueue(tmsg);
 							}
 						}
 					}
+
+					// send outgoing messages
+					node->send(out_messages);
 
 					// release all messages that where sent
 					while (sent_messages->has_message())
