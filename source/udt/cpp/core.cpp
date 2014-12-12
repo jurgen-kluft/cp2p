@@ -755,7 +755,7 @@ POST_CONNECT:
    memcpy(m_piSelfIP, m_ConnRes.m_piPeerIP, 16);
 
    // Prepare all data structures
-   try
+   //try
    {
       m_pSndBuffer = new CSndBuffer(32, m_iPayloadSize);
       m_pRcvBuffer = new CRcvBuffer(&(m_pRcvQueue->m_UnitQueue), m_iRcvBufSize);
@@ -766,10 +766,10 @@ POST_CONNECT:
       m_pRcvTimeWindow = new CPktTimeWindow(16, 64);
       m_pSndTimeWindow = new CPktTimeWindow();
    }
-   catch (...)
-   {
-      throw CUDTException(3, 2, 0);
-   }
+   // catch (...)
+   // {
+   //    throw CUDTException(3, 2, 0);
+   // }
 
    CInfoBlock ib;
    ib.m_iIPversion = m_iIPversion;
@@ -1658,7 +1658,7 @@ void CUDT::CCUpdate()
       return;
    const double minSP = 1000000.0 / (double(m_llMaxBW) / m_iMSS) * m_ullCPUFrequency;
    if (m_ullInterval < minSP)
-       m_ullInterval = minSP;
+	   m_ullInterval = (uint64_t)minSP;
 }
 
 void CUDT::initSynch()

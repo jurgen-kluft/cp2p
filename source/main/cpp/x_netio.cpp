@@ -611,7 +611,8 @@ namespace xcore
 					inet_ntop(sa.sa.sa_family, sa.sa.sa_family == AF_INET ? (void *) &sa.sin.sin_addr : (void *) &sa.sin6.sin6_addr, buf, len);
 #elif defined(_WIN32)
 					// Only Windoze Vista (and newer) have inet_ntop()
-					strncpy(buf, inet_ntoa(sa.sin.sin_addr), len);
+					// strncpy(buf, inet_ntoa(sa.sin.sin_addr), len);
+					inet_ntop(sa.sa.sa_family, (void *) &sa.sin.sin_addr, buf, len);
 #else
 					inet_ntop(sa.sa.sa_family, (void *) &sa.sin.sin_addr, buf, len);
 #endif

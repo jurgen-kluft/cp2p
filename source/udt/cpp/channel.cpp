@@ -123,7 +123,7 @@ void CChannel::open(const sockaddr* addr)
       if (0 != ::getaddrinfo(NULL, "0", &hints, &res))
          throw CUDTException(1, 3, NET_ERROR);
 
-      if (0 != ::bind(m_iSocket, res->ai_addr, res->ai_addrlen))
+      if (0 != ::bind(m_iSocket, res->ai_addr, (int)res->ai_addrlen))
          throw CUDTException(1, 3, NET_ERROR);
 
       ::freeaddrinfo(res);

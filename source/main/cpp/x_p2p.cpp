@@ -35,6 +35,14 @@ namespace xcore
 			inline bool			is_not_connected() const	{ estatus s = get_status(); return s==0 || s>=DISCONNECT; }
 			inline void			set_status(estatus s)		{ status_ = s; }
 
+			enum epeer { LOCAL_PEER, REMOTE_PEER };
+			void				init(epeer _peer, estatus _status, netip4 _ip)
+			{
+				is_remote_ = _peer == REMOTE_PEER;
+				status_ = _status;
+				endpoint_ = _ip;
+			}
+
 		protected:
 			bool				is_remote_;
 			estatus				status_;
@@ -593,11 +601,9 @@ namespace xcore
 		};
 
 
-
 		// -------------------------------------------------------------------------------------------
 		// Peer Connection
 		// -------------------------------------------------------------------------------------------
-
 		class peer_connection : public peer, public lqueue<peer_connection>
 		{
 		public:
@@ -619,7 +625,6 @@ namespace xcore
 			peer_io_reader		io_message_reader_;
 		};
 
-
 		node::node_imp::node_imp(iallocator* _allocator, imessage_allocator* _message_allocator)
 			: peer()
 			, allocator_(_allocator)
@@ -637,6 +642,8 @@ namespace xcore
 
 		ipeer*	node::node_imp::start(netip4 _endpoint)
 		{
+			init(peer_connection::LOCAL_PEER, CONNECTED, _endpoint);
+
 			server_ = ns_create_server(this);
 			server_->start(this, this, this);
 			return this;
@@ -678,6 +685,7 @@ namespace xcore
 			{
 				void * mem = allocator_->allocate(sizeof(peer_connection), sizeof(void*));
 				peer = new (mem) peer_connection();
+				peer->init(peer_connection::REMOTE_PEER, INACTIVE, _endpoint);
 			}
 
 			return peer;

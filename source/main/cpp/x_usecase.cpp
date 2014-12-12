@@ -35,9 +35,9 @@ namespace xcore
 				mOurAllocator->deallocate(inOldMem);
 			}
 
-			static MyAllocator*	sCreate(x_iallocator* inSystemAllocator, u32 memsize)
+			static MyAllocator*	sCreate(x_iallocator* inSystemAllocator)
 			{
-				// Create a heap allocator or any other type of allocator
+				// Create a heap, pool, caching or any other type of allocator
 				return NULL;
 			}
 
@@ -95,9 +95,9 @@ namespace xcore
 				return message;
 			}
 
-			static MyMessageAllocator*	sCreate(x_iallocator* inSystemAllocator, u32 memsize)
+			static MyMessageAllocator*	sCreate(x_iallocator* inSystemAllocator)
 			{
-				// Create a heap allocator or any other type of allocator
+				// Create a heap, pool, caching or any other type of allocator
 				return NULL;
 			}
 
@@ -119,8 +119,8 @@ namespace xcore
 
 		static void ExampleUseCase(x_iallocator* inSystemAllocator)
 		{
-			MyAllocator* ourSystemAllocator = MyAllocator::sCreate(inSystemAllocator, 2 * 1024 * 1024);
-			MyMessageAllocator* ourMessageAllocator = MyMessageAllocator::sCreate(inSystemAllocator, 24 * 1024 * 1024);
+			MyAllocator* ourSystemAllocator = MyAllocator::sCreate(inSystemAllocator);
+			MyMessageAllocator* ourMessageAllocator = MyMessageAllocator::sCreate(inSystemAllocator);
 
 			bool start_as_peer = true;
 

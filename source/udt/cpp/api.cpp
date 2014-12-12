@@ -2313,7 +2313,7 @@ int epoll_wait(int eid, set<UDTSOCKET>* readfds, set<UDTSOCKET>* writefds, int64
    if ((val != NULL) && !val->empty()) \
    { \
       if (*num > static_cast<int>(val->size())) \
-         *num = val->size(); \
+         *num = (int)val->size(); \
       int count = 0; \
       for (it = val->begin(); it != val->end(); ++ it) \
       { \

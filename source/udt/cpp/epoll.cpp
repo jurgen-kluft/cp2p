@@ -215,14 +215,14 @@ int CEPoll::wait(const int eid, set<UDTSOCKET>* readfds, set<UDTSOCKET>* writefd
          *readfds = p->second.m_sUDTReads;
          for (set<UDTSOCKET>::const_iterator i = p->second.m_sUDTExcepts.begin(); i != p->second.m_sUDTExcepts.end(); ++ i)
             readfds->insert(*i);
-         total += p->second.m_sUDTReads.size() + p->second.m_sUDTExcepts.size();
+		 total += (int)p->second.m_sUDTReads.size() + (int)p->second.m_sUDTExcepts.size();
       }
       if ((NULL != writefds) && (!p->second.m_sUDTWrites.empty() || !p->second.m_sUDTExcepts.empty()))
       {
          *writefds = p->second.m_sUDTWrites;
          for (set<UDTSOCKET>::const_iterator i = p->second.m_sUDTExcepts.begin(); i != p->second.m_sUDTExcepts.end(); ++ i)
             writefds->insert(*i);
-         total += p->second.m_sUDTWrites.size() + p->second.m_sUDTExcepts.size();
+		 total += (int)p->second.m_sUDTWrites.size() + (int)p->second.m_sUDTExcepts.size();
       }
 
       if (lrfds || lwfds)
