@@ -1,0 +1,6 @@
+
+
+P2P NODE
+- Zer0 copy messaging (send and receive)
+- Event loop (no threading)
+- Peer object based connection, identified using endpoint
