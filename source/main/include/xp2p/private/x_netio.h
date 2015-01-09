@@ -25,11 +25,11 @@ namespace xcore
 		class ns_iserver
 		{
 		public:
-			virtual void			start(ns_allocator *, io_protocol *, void * server_data) = 0;
+			virtual void			start(ns_allocator *, io_protocol *) = 0;
 			virtual void			release() = 0;
 
 			virtual s32				bind(const char * addr) = 0;
-			virtual ns_connection*	connect(netip4 ip, void * connection_param) = 0;
+			virtual ns_connection*	connect(netip4 ip) = 0;
 			virtual void			disconnect(ns_connection*) = 0;
 
 			virtual s32				poll(s32 milli) = 0;
