@@ -645,7 +645,7 @@ namespace xcore
 			init(peer_connection::LOCAL_PEER, CONNECTED, _endpoint);
 
 			server_ = ns_create_server(this);
-			server_->start(this, this, this);
+			server_->start(this, this);
 			return this;
 		}
 
@@ -710,7 +710,7 @@ namespace xcore
 			if (p->connection_ == NULL)
 			{
 				p->set_status(ipeer::CONNECT);
-				p->connection_ = server_->connect(_peer->get_ip4(), (void*)_peer);
+				p->connection_ = server_->connect(_peer->get_ip4());
 			}
 		}
 

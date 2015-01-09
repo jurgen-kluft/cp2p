@@ -8,6 +8,7 @@
 UNITTEST_SUITE_LIST(xP2PUnitTest);
 
 UNITTEST_SUITE_DECLARE(xP2PUnitTest, msg);
+UNITTEST_SUITE_DECLARE(xP2PUnitTest, p2p);
 
 namespace xcore
 {

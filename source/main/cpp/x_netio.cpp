@@ -148,19 +148,18 @@ namespace xcore
 		{
 		public:
 			inline				ns_server()
-				: server_data(NULL)
-				, listening_sock()
+				: listening_sock()
 				, allocator(NULL)
 				, protocol(NULL)
 				, num_active_connections(0)
 			{
 			}
 
-			void				start(ns_allocator *, io_protocol *, void * server_data);
+			void				start(ns_allocator *, io_protocol *);
 			void				release();
 
 			s32					bind(const char * addr);
-			ns_connection*		connect(netip4 ip, void * connection_param);
+			ns_connection*		connect(netip4 ip);
 			void				disconnect(ns_connection*);
 
 			s32					poll(s32 milli);
@@ -173,7 +172,7 @@ namespace xcore
 			ns_connection*		accept_conn();
 			ns_connection*		create_connection();
 
-			ns_connection*		add_sock(ns_socket_t sock, void *p);
+			ns_connection*		add_sock(ns_socket_t sock);
 			void				add_conn(ns_connection *c);
 			void				close_conn(u32 conn_index);
 			void				close_conn(ns_connection * conn);
@@ -185,7 +184,6 @@ namespace xcore
 
 			void				callback(ns_connection * conn, io_protocol::event ev, void *p);
 
-			void*				server_data;
 			ns_socket_t			listening_sock;
 			ns_socket_t			ctl[2];
 			ns_allocator *		allocator;
@@ -209,7 +207,6 @@ namespace xcore
 		public:
 			inline				ns_connection()
 				: server(NULL)
-				, connection_data(NULL)
 				, last_io_time(0)
 				, flags(0)
 			{
@@ -219,12 +216,8 @@ namespace xcore
 			ns_server*				server;
 			ns_socket_t				sock;
 			socket_address			sa;
-
 			io_connection			io_connection_;
-			void*					connection_data;
-			
 			time_t					last_io_time;
-			
 			u32						flags;
 
 			virtual s32				read(xbyte* _buffer, u32 _size)
@@ -868,7 +861,7 @@ namespace xcore
 			return this->num_active_connections;
 		}
 
-		ns_connection * ns_server::connect(netip4 netip, void *param) 
+		ns_connection * ns_server::connect(netip4 netip) 
 		{
 			ns_socket_t sock;
 			sockaddr_in sin;
@@ -903,7 +896,6 @@ namespace xcore
 			memset(conn, 0, sizeof(*conn));
 			conn->server = this;
 			conn->sock = sock;
-			conn->connection_data = param;
 			conn->flags = NSF_CONNECTING;
 			conn->last_io_time = time(NULL);
 
@@ -919,7 +911,7 @@ namespace xcore
 		}
 
 
-		ns_connection * ns_server::add_sock(ns_socket_t sock, void *p)
+		ns_connection * ns_server::add_sock(ns_socket_t sock)
 		{
 			ns_connection *conn = create_connection();
 			if (conn != NULL)
@@ -927,7 +919,6 @@ namespace xcore
 				memset(conn, 0, sizeof(*conn));
 				ns_set_non_blocking_mode(sock);
 				conn->sock = sock;
-				conn->connection_data = p;
 				conn->server = this;
 				conn->last_io_time = time(NULL);
 				add_conn(conn);
@@ -961,7 +952,7 @@ namespace xcore
 			ns_server::wakeup_ex((void *) "", 0);
 		}
 
-		void ns_server::start(ns_allocator * _allocator, io_protocol * protocol, void * server_data) 
+		void ns_server::start(ns_allocator * _allocator, io_protocol * protocol) 
 		{
 			void * ip_mem = _allocator->ns_allocate(sizeof(ns_server), sizeof(void*));
 			this->allocator = _allocator;
@@ -970,7 +961,6 @@ namespace xcore
 			this->listening_sock.clear();
 			this->ctl[0].clear();
 			this->ctl[1].clear();
-			this->server_data = server_data;
 
 			{ WSADATA data; WSAStartup(MAKEWORD(2, 2), &data); }
 
