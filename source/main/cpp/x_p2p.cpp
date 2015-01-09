@@ -574,7 +574,7 @@ namespace xcore
 						/// Read message block data
 						/// - read block data
 						/// - when block data complete, add block to message
-						/// - move state to STATE_READ_HEADER
+						/// - move state to STATE_READ_BLOCK_HEADER
 						s32 const result = io_reader_msg_block_data_.read(_io_reader);
 						if (result == 0)
 						{
