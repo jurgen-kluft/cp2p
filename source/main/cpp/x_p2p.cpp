@@ -17,6 +17,33 @@ namespace xcore
 	{
 		class peer_connection;
 
+		
+		class node : public inode
+		{
+		public:
+								node();
+								~node();
+
+			ipeer*				start(netip4 endpoint, iallocator* _allocator, imessage_allocator* _message_allocator);
+			void				stop();
+
+			ipeer*				register_peer(netip4 endpoint);
+			void				unregister_peer(ipeer*);
+
+			void				connect_to(ipeer* peer);
+			void				disconnect_from(ipeer* peer);
+
+			u32					connections(ipeer** _out_peers, u32 _in_max_peers);
+			void				send(outgoing_messages&);
+
+			void				event_wakeup();
+			bool				event_loop(incoming_messages*& _received, gc_messages*& _sent, u32 _ms_to_wait = 0);
+
+		protected:
+			class node_imp;
+			node_imp*			imp_;
+		};
+
 		class peer : public ipeer
 		{
 		public:
@@ -69,7 +96,7 @@ namespace xcore
 			void				send(outgoing_messages&);
 
 			void				event_wakeup();
-			bool				event_loop(incoming_messages*& _rcvd, outgoing_messages*& _sent, u32 _ms_to_wait);
+			bool				event_loop(incoming_messages*& _rcvd, gc_messages*& _sent, u32 _ms_to_wait);
 
 			// ns_allocator interface
 			virtual void*		ns_allocate(u32 _size, u32 _alignment);
@@ -752,7 +779,7 @@ namespace xcore
 			server_->wakeup();
 		}
 
-		bool	node::node_imp::event_loop(incoming_messages*&, outgoing_messages*& _sent, u32 _ms_to_wait)
+		bool	node::node_imp::event_loop(incoming_messages*&, gc_messages*& _sent, u32 _ms_to_wait)
 		{
 			s32 const num_connections = server_->poll(_ms_to_wait);
 			return true;
@@ -907,7 +934,7 @@ namespace xcore
 			imp_->event_wakeup();
 		}
 
-		bool				node::event_loop(incoming_messages*& _msgs, outgoing_messages*& _sent, u32 _wait_in_ms)
+		bool				node::event_loop(incoming_messages*& _msgs, gc_messages*& _sent, u32 _wait_in_ms)
 		{
 			return imp_->event_loop(_msgs, _sent, _wait_in_ms);
 		}

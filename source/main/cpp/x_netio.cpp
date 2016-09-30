@@ -359,9 +359,9 @@ namespace xcore
 			close_conn(i);
 		}
 
-		void ns_set_close_on_exec(sock_t sock)
+		void ns_set_close_on_exec(ns_socket_t sock)
 		{
-			(void) SetHandleInformation((HANDLE) sock, HANDLE_FLAG_INHERIT, 0);
+			(void) SetHandleInformation((HANDLE) sock.s, HANDLE_FLAG_INHERIT, 0);
 		}
 
 		static void ns_set_non_blocking_mode(ns_socket_t sock)

@@ -126,7 +126,7 @@ namespace xcore
 		class MyPeer
 		{
 		public:
-			xp2p::node*		node;
+			xp2p::inode*	node;
 			xp2p::ipeer*	host;
 			xp2p::ipeer*	remote;
 
@@ -160,7 +160,7 @@ namespace xcore
 			void Tick(bool do_send_message)
 			{
 				incoming_messages* rcvd_messages = NULL;
-				outgoing_messages* sent_messages = NULL;
+				gc_messages* sent_messages = NULL;
 
 				if (node->event_loop(rcvd_messages, sent_messages, 100))	// Wait a maximum of 1000 ms
 				{
@@ -204,7 +204,7 @@ namespace xcore
 								u32 msgStringLen = 0;
 								const char* msgString = "";
 								reader.view_string(msgString, msgStringLen);
-								x_printf("info: message \"%s\"received from \"%s\"", x_va_list(x_va((const char*)msgString), x_va(ip4_str)));
+								Printf("info: message \"%s\"received from \"%s\"", x_va_list(x_va((const char*)msgString), x_va(ip4_str)));
 							}
 						}
 

@@ -26,7 +26,7 @@ namespace xcore
 			bool		operator == (const netip4& _other) const			{ return port_==_other.port_ && ip_.uip_==_other.ip_.uip_; }
 			bool		operator != (const netip4& _other) const			{ return port_!=_other.port_ || ip_.uip_!=_other.ip_.uip_; }
 
-			void		to_string(char* s, u32 l);
+			void		to_string(char* s, u32 l) const;
 			
 			union ip
 			{

@@ -79,10 +79,15 @@ namespace xcore
 			else return (_cursor + _num_bytes) <= _block->get_size();
 		}
 
+		bool				message_reader::has_block() const
+		{
+			return block_ != NULL;
+		}
+
 		void				message_reader::set_cursor(u32 c)
 		{
 			cursor_ = c;
-			if (cursor_ > block_->get_size())
+			if (cursor_ >= block_->get_size())
 				cursor_ = block_->get_size();
 		}
 		u32					message_reader::get_cursor() const
@@ -90,6 +95,17 @@ namespace xcore
 			return cursor_;
 		}
 
+		u32					message_reader::get_flags() const
+		{
+			if (block_ == NULL) return 0;
+			return block_->get_flags();
+		}
+
+		u32					message_reader::get_size() const
+		{
+			if (block_ == NULL) return 0;
+			return block_->get_size() - cursor_;
+		}
 
 		bool				message_reader::can_read(u32 number_of_bytes) const
 		{
@@ -270,7 +286,10 @@ namespace xcore
 		void				message_reader::next_block()
 		{
 			if (block_ != NULL)
+			{
 				block_ = block_->get_next();
+				cursor_ = 0;
+			}
 		}
 
 
@@ -576,6 +595,11 @@ namespace xcore
 			return message_->get_writer();
 		}
 
+		bool				outgoing_messages::has_message() const
+		{
+			return message_ != NULL;
+		}
+
 		void				outgoing_messages::enqueue(message* m)
 		{
 			if (message_ == NULL) 
@@ -645,6 +669,11 @@ namespace xcore
 			return message_->get_reader();
 		}
 
+		bool				incoming_messages::has_message() const
+		{
+			return message_ != NULL;
+		}
+
 		void				incoming_messages::enqueue(message* m)
 		{
 			if (message_ == NULL) 
@@ -660,5 +689,31 @@ namespace xcore
 			else 
 				return message_->dequeue();
 		}
+
+		/// ---------------------------------------------------------------------------------------
+		/// Garbage-Collected Messages
+		/// ---------------------------------------------------------------------------------------
+
+		bool				gc_messages::has_message() const
+		{
+			return message_ != NULL;
+		}
+
+		void				gc_messages::enqueue(message* m)
+		{
+			if (message_ == NULL)
+				message_ = m;
+			else
+				message_->enqueue(m);
+		}
+
+		message*			gc_messages::dequeue()
+		{
+			if (message_ == NULL)
+				return NULL;
+			else
+				return message_->dequeue();
+		}
+
 	}
 }

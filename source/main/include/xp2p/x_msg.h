@@ -212,6 +212,23 @@ namespace xcore
 			message*			message_;
 		};
 
+		class gc_messages
+		{
+		public:
+			inline				 gc_messages() : message_(NULL) {}
+			inline				 gc_messages(message* _message) : message_(_message) {}
+			inline				~gc_messages() {}
+
+			bool				has_message() const;
+			void				enqueue(message*);
+			message*			dequeue();
+
+		protected:
+			inline				gc_messages(const gc_messages&) {}
+
+			message*			message_;
+		};
+
 		class imessage_allocator
 		{
 		public:

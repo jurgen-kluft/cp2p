@@ -25,7 +25,7 @@ func GetPackage() *denv.Package {
 	mainlib.Dependencies = append(mainlib.Dependencies, xbasepkg.GetMainLib())
 
 	// 'xp2p' unittest project
-	maintest := denv.SetupDefaultCppTestProject("xhash_test", "github.com\\jurgen-kluft\\xp2p")
+	maintest := denv.SetupDefaultCppTestProject("xp2p_test", "github.com\\jurgen-kluft\\xp2p")
 	maintest.Dependencies = append(maintest.Dependencies, xunittestpkg.GetMainLib())
 	maintest.Dependencies = append(maintest.Dependencies, xentrypkg.GetMainLib())
 	maintest.Dependencies = append(maintest.Dependencies, xbasepkg.GetMainLib())

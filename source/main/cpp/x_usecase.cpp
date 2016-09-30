@@ -126,8 +126,7 @@ namespace xcore
 
 			if (start_as_peer)
 			{
-				xp2p::node system;
-				xp2p::node* node = &system;
+				xp2p::inode* node = gCreateNode(ourSystemAllocator);
 				ipeer* host = node->start(netip4().set_port(51888), ourSystemAllocator, ourMessageAllocator);
 
 				// Let's connect to the tracker 
@@ -139,11 +138,18 @@ namespace xcore
 
 				incoming_messages* rcvd_messages;
 				outgoing_messages out_messages;
-				outgoing_messages* sent_messages;
+				gc_messages* sent_messages;
 				while (tracker != NULL)
 				{
 					if (node->event_loop(rcvd_messages, sent_messages, 1000))	// Wait a maximum of 1000 ms
 					{
+						// Release all messages that where sent
+						while (sent_messages->has_message())
+						{
+							message* msg = sent_messages->dequeue();
+							ourMessageAllocator->deallocate(msg);
+						}
+
 						while (rcvd_messages->has_message())
 						{
 							message* rcvdmsg = rcvd_messages->dequeue();
@@ -181,7 +187,7 @@ namespace xcore
 									u32 msgStringLen = 0;
 									const char* msgString = "";
 									reader.view_string(msgString, msgStringLen);
-									x_printf("info: message \"%s\"received from tracker \"%s\"", x_va_list(x_va((const char*)msgString), x_va(ip4_str)));
+									Printf("info: message \"%s\"received from tracker \"%s\"", x_va_list(x_va((const char*)msgString), x_va(ip4_str)));
 								}
 							}
 							else
@@ -195,13 +201,6 @@ namespace xcore
 
 						// send all messages created in this iteration
 						node->send(out_messages);
-
-						// release all messages that where sent
-						while (sent_messages->has_message())
-						{
-							message* msg = sent_messages->dequeue();
-							ourMessageAllocator->deallocate(msg);
-						}
 					}
 				}
 
@@ -214,21 +213,27 @@ namespace xcore
 			else
 			{
 				// Start as Tracker
-				xp2p::node system;
-				xp2p::node* node = &system;
+				xp2p::inode* node = gCreateNode(ourSystemAllocator);
 
 				// Let's boot as a tracker which always has peerid '0'
 				netip4 tracker_ep = netip4().set_port(51888);
 				ipeer* tracker = node->start(tracker_ep, ourSystemAllocator, ourMessageAllocator);
 
 				incoming_messages* rcvd_messages;
-				outgoing_messages* sent_messages;
+				gc_messages* sent_messages;
 				while (tracker != NULL)
 				{
 					outgoing_messages out_messages;
 
 					if (node->event_loop(rcvd_messages, sent_messages, 1000))	// Wait a maximum of 1000 ms
 					{
+						// Release all messages that where sent
+						while (sent_messages->has_message())
+						{
+							message* msg = sent_messages->dequeue();
+							ourMessageAllocator->deallocate(msg);
+						}
+
 						while (rcvd_messages->has_message())
 						{
 							message* rcvdmsg = rcvd_messages->dequeue();
@@ -257,7 +262,7 @@ namespace xcore
 								u32 msgStringLen = 0;
 								char const* msgString = "";
 								reader.view_string(msgString, msgStringLen);
-								x_printf("info: message \"%s\"received from peer \"%s\"", x_va_list(x_va((const char*)msgString), x_va(ip4_str)));
+								Printf("info: message \"%s\"received from peer \"%s\"", x_va_list(x_va((const char*)msgString), x_va(ip4_str)));
 
 								// Send back a message
 								message* tmsg = ourMessageAllocator->allocate(tracker, rcvdmsg->get_from(), MSG_FLAG_ANNOUNCE, 40);
@@ -270,13 +275,6 @@ namespace xcore
 
 					// send outgoing messages
 					node->send(out_messages);
-
-					// release all messages that where sent
-					while (sent_messages->has_message())
-					{
-						message* msg = sent_messages->dequeue();
-						ourMessageAllocator->deallocate(msg);
-					}
 				}
 
 				// Clear all pointers

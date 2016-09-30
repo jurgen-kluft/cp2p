@@ -21,37 +21,36 @@ namespace xcore
 	// ==============================================================================================================================
 	namespace xp2p
 	{
+		class node;
+		class ipeer;
 		class iallocator;
 		class imessage_allocator;
-		class ipeer;
 		class outgoing_messages;
 		class incoming_messages;
+		class gc_messages;
 
-		class node
+		class inode
 		{
 		public:
-								node();
-								~node();
+			virtual ipeer*		start(netip4 endpoint, iallocator* _allocator, imessage_allocator* _message_allocator) = 0;
+			virtual void		stop() = 0;
 
-			ipeer*				start(netip4 endpoint, iallocator* _allocator, imessage_allocator* _message_allocator);
-			void				stop();
+			virtual ipeer*		register_peer(netip4 endpoint) = 0;
+			virtual void		unregister_peer(ipeer*) = 0;
 
-			ipeer*				register_peer(netip4 endpoint);
-			void				unregister_peer(ipeer*);
+			virtual void		connect_to(ipeer* peer) = 0;
+			virtual void		disconnect_from(ipeer* peer) = 0;
 
-			void				connect_to(ipeer* peer);
-			void				disconnect_from(ipeer* peer);
+			virtual u32			connections(ipeer** _out_peers, u32 _in_max_peers) = 0;
+			virtual void		send(outgoing_messages&) = 0;
 
-			u32					connections(ipeer** _out_peers, u32 _in_max_peers);
-			void				send(outgoing_messages&);
-
-			void				event_wakeup();
-			bool				event_loop(incoming_messages*& _received, outgoing_messages*& _sent, u32 _ms_to_wait = 0);
-
-		protected:
-			class node_imp;
-			node_imp*			imp_;
+			virtual void		event_wakeup() = 0;
+			virtual bool		event_loop(incoming_messages*& _received, gc_messages*& _sent, u32 _ms_to_wait) = 0;
 		};
+
+
+		inode*	gCreateNode(iallocator* _allocator);
+
 
 	}
 }
