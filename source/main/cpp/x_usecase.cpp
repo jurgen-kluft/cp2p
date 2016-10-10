@@ -13,6 +13,17 @@ namespace xcore
 {
 	namespace xp2p
 	{
+		/*
+		Still thinking about using LibuTP for handling the network IO since it does provide us with a simpler setup to deal with disconnection
+		as well as message allocation. If we also put in the constraint that message size can only be less or equal to the MTU size then we do
+		not have to setup any complicated protocol for the p2p layer. It will then just be a message sending and receiving layer that indicates
+		where it should go to and where it came from. LibuTP will provide us with congestion control and reliability, furthermore it might work
+		even though there is a firewall.
+		
+		By choosing a good allocator implementation we can also reduce copying messages (memory) 
+		*/
+
+
 		enum emessage_flags
 		{
 			MSG_FLAG_ANNOUNCE = 1,
