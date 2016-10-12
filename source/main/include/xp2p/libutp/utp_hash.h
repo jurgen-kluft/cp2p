@@ -52,7 +52,8 @@ typedef uint (*utp_hash_equal_t)(const void *key_a, const void *key_b, size_t ke
 //
 // N is the number of buckets.
 //
-struct utp_hash_t {
+struct utp_hash_t
+{
 	utp_link_t N;
 	byte K;
 	byte E;
@@ -69,7 +70,8 @@ struct utp_hash_t {
 #pragma warning (default: 4200)
 #endif
 
-struct utp_hash_iterator_t {
+struct utp_hash_iterator_t 
+{
 	utp_link_t bucket;
 	utp_link_t elem;
 
@@ -101,13 +103,18 @@ void utp_hash_free_mem(utp_hash_t *hash);
 	};
 */
 
-template<typename K, typename T> class utpHashTable {
+template<typename K, typename T> class utpHashTable
+{
 	utp_hash_t *hash;
+
 public:
-	static uint compare(const void *k1, const void *k2, size_t ks) {
+	static uint compare(const void *k1, const void *k2, size_t ks) 
+	{
 		return *((K*)k1) == *((K*)k2);
 	}
-	static uint32 compute_hash(const void *k, size_t ks) {
+	
+	static uint32 compute_hash(const void *k, size_t ks) 
+	{
 		return ((K*)k)->compute_hash();
 	}
 	void Init() { hash = NULL; }

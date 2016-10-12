@@ -1,27 +1,27 @@
-/*
- * Copyright (c) 2010-2013 BitTorrent, Inc.
- *
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in
- * all copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
- * THE SOFTWARE.
- */
+#ifndef __UTP_UTILS_H__
+#define __UTP_UTILS_H__
 
-uint64 utp_default_get_udp_mtu(utp_callback_arguments *args);
-uint64 utp_default_get_udp_overhead(utp_callback_arguments *args);
-uint64 utp_default_get_random(utp_callback_arguments *args);
-uint64 utp_default_get_milliseconds(utp_callback_arguments *args);
-uint64 utp_default_get_microseconds(utp_callback_arguments *args);
+#include "xp2p/libutp/utp_types.h"
+
+typedef struct UTPSocket					utp_socket;
+typedef struct struct_utp_context			utp_context;
+
+class utp_system
+{
+public:
+	virtual uint16 get_udp_mtu(utp_context *ctx, utp_socket *s, const struct sockaddr *address, socklen_t address_len) = 0;
+	virtual uint16 get_udp_overhead(utp_context *ctx, utp_socket *s, const struct sockaddr *address, socklen_t address_len) = 0;
+	virtual uint64 get_milliseconds(utp_context *ctx, utp_socket *s) = 0;
+	virtual uint64 get_microseconds(utp_context *ctx, utp_socket *s) = 0;
+	virtual uint32 get_random(utp_context *ctx, utp_socket *s) = 0;
+	virtual size_t get_read_buffer_size(utp_context *ctx, utp_socket *s) = 0;
+
+	static uint64 default_get_udp_mtu(utp_context *ctx, utp_socket *s, const struct sockaddr *address, socklen_t address_len);
+	static uint64 default_get_udp_overhead(utp_context *ctx, utp_socket *s, const struct sockaddr *address, socklen_t address_len);
+	static uint64 default_get_random(utp_context *ctx, utp_socket *s);
+	static uint64 default_get_milliseconds(utp_context *ctx, utp_socket *s);
+	static uint64 default_get_microseconds(utp_context *ctx, utp_socket *s);
+};
+
+
+#endif

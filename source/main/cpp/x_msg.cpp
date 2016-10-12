@@ -282,17 +282,7 @@ namespace xcore
 			cursor_ += strlen;
 			return true;
 		}
-
-		void				message_reader::next_block()
-		{
-			if (block_ != NULL)
-			{
-				block_ = block_->get_next();
-				cursor_ = 0;
-			}
-		}
-
-
+		
 		/// ---------------------------------------------------------------------------------------
 		/// Message Writer
 		/// ---------------------------------------------------------------------------------------
@@ -468,22 +458,28 @@ namespace xcore
 			return 0;
 		}
 
-		void				message_writer::next_block()
-		{
-			if (block_ != NULL)
-				block_ = block_->get_next();
-		}
 
 
 		/// ---------------------------------------------------------------------------------------
 		/// Message
 		/// ---------------------------------------------------------------------------------------
-		ipeer*				message::get_from() const
+
+		void				message::set_block(message_block* block)
+		{
+			pblock_ = block;
+		}
+
+		message_block*		message::get_block()
+		{
+			return pblock_;
+		}
+
+		peer*				message::get_from() const
 		{
 			return from_;
 		}
 
-		ipeer*				message::get_to() const
+		peer*				message::get_to() const
 		{
 			return to_;
 		}
@@ -494,7 +490,7 @@ namespace xcore
 		}
 
 
-		bool				message::is_from(ipeer* p) const
+		bool				message::is_from(peer* p) const
 		{
 			return p == from_;
 		}
@@ -507,7 +503,7 @@ namespace xcore
 
 		bool				message::has_data() const
 		{
-			return nblocks_>0;
+			return pblock_ != NULL;
 		}
 
 
@@ -529,39 +525,19 @@ namespace xcore
 			return e == MESSAGE_FLAG_EVENT_CANNOT_CONNECT;
 		}
 
-		void				message::add_block(message_block* _block)
-		{
-			if (pblocks_ == NULL)
-			{
-				pblocks_ = _block;
-			}
-			else
-			{
-				pblocks_->enqueue(_block);
-			}
-			nblocks_ += 1;
-		}
-
 		message_reader		message::get_reader() const
 		{
-			return message_reader(pblocks_);
+			return message_reader(pblock_);
 		}
 
 		message_writer		message::get_writer() const
 		{
-			return message_writer(pblocks_);
+			return message_writer(pblock_);
 		}
 
-		void				message::release(imessage_allocator* a)
+		void				message::release(message_allocator* a)
 		{
-			nblocks_ = 0;
-			message_block* current = pblocks_;
-			while (current != NULL)
-			{
-				message_block* previous = current;
-				current = current->get_next();
-				a->deallocate(previous);
-			}
+			a->deallocate(pblock_);
 			a->deallocate(this);
 		}
 
@@ -570,12 +546,12 @@ namespace xcore
 		/// ---------------------------------------------------------------------------------------
 		/// Outgoing Message
 		/// ---------------------------------------------------------------------------------------
-		ipeer*				outgoing_messages::get_from() const
+		peer*				outgoing_messages::get_from() const
 		{
 			return message_->get_from();
 		}
 
-		ipeer*				outgoing_messages::get_to() const
+		peer*				outgoing_messages::get_to() const
 		{
 			return message_->get_to();
 		}
@@ -608,12 +584,18 @@ namespace xcore
 				message_->enqueue(m);
 		}
 
+		message*			outgoing_messages::peek()
+		{
+			return message_;
+		}
+
 		message*			outgoing_messages::dequeue()
 		{
 			if (message_ == NULL) 
 				return NULL;
-			else 
-				return message_->dequeue();
+
+			message* msg = message_->dequeue(&message_);
+			return msg;
 		}
 
 
@@ -621,12 +603,12 @@ namespace xcore
 		/// Incoming Message
 		/// ---------------------------------------------------------------------------------------
 
-		bool				incoming_messages::is_from(ipeer* from) const
+		bool				incoming_messages::is_from(peer* from) const
 		{
 			return message_->is_from(from);
 		}
 
-		ipeer*				incoming_messages::get_from()
+		peer*				incoming_messages::get_from()
 		{
 			return message_->get_from();
 		}
@@ -694,12 +676,12 @@ namespace xcore
 		/// Garbage-Collected Messages
 		/// ---------------------------------------------------------------------------------------
 
-		bool				gc_messages::has_message() const
+		bool				garbagec_messages::has_message() const
 		{
 			return message_ != NULL;
 		}
 
-		void				gc_messages::enqueue(message* m)
+		void				garbagec_messages::enqueue(message* m)
 		{
 			if (message_ == NULL)
 				message_ = m;
@@ -707,7 +689,7 @@ namespace xcore
 				message_->enqueue(m);
 		}
 
-		message*			gc_messages::dequeue()
+		message*			garbagec_messages::dequeue()
 		{
 			if (message_ == NULL)
 				return NULL;

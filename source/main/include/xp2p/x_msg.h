@@ -18,15 +18,15 @@ namespace xcore
 	// ==============================================================================================================================
 	namespace xp2p
 	{
-		class ipeer;
-		class imessage_allocator;
+		class peer;
+		class message_allocator;
 
-		class message_block : public lqueue<message_block>
+		class message_block
 		{
 		public:
-			inline				message_block() : lqueue(this), flags_(0), size_(0), data_(NULL), const_data_(NULL) { }
-			inline				message_block(void* _data, u32 _size, u32 _flags) : lqueue(this), flags_(_flags), size_(_size), data_((xbyte*)_data), const_data_(NULL) {}
-			inline				message_block(void const* _data, u32 _size, u32 _flags) : lqueue(this), flags_(_flags), size_(_size), data_(NULL), const_data_((xbyte const*)_data) {}
+			inline				message_block() : flags_(0), size_(0), data_(NULL), const_data_(NULL) { }
+			inline				message_block(void* _data, u32 _size, u32 _flags) : flags_(_flags), size_(_size), data_((xbyte*)_data), const_data_(NULL) {}
+			inline				message_block(void const* _data, u32 _size, u32 _flags) : flags_(_flags), size_(_size), data_(NULL), const_data_((xbyte const*)_data) {}
 
 			u32					get_flags() const;
 			void				set_flags(u32 _flags);
@@ -74,8 +74,6 @@ namespace xcore
 			bool				view_data(xbyte const*& _data, u32 _size);
 			bool				view_string(char const*& _str, u32& _out_len);
 
-			void				next_block();
-
 		protected:
 			u32					cursor_;
 			message_block*		block_;
@@ -117,7 +115,7 @@ namespace xcore
 		class message : public lqueue<message>
 		{
 		public:
-			inline				message(ipeer* _from, ipeer* _to, u32 _flags) : lqueue(this), from_(_from), to_(_to), flags_(_flags), nblocks_(0), pblocks_(NULL) {}
+			inline				message(peer* _from, peer* _to, u32 _flags) : lqueue(this), from_(_from), to_(_to), flags_(_flags), pblock_(NULL) {}
 
 			enum eflags
 			{
@@ -128,9 +126,12 @@ namespace xcore
 				MESSAGE_FLAG_EVENT_DISCONNECTED = 0x00000003,
 			};
 
-			ipeer*				get_from() const;
-			ipeer*				get_to() const;
-			bool				is_from(ipeer*) const;
+			void				set_block(message_block* block);
+			message_block*		get_block();
+
+			peer*				get_from() const;
+			peer*				get_to() const;
+			bool				is_from(peer*) const;
 
 			u32					get_flags() const;
 			bool				has_event() const;
@@ -140,21 +141,18 @@ namespace xcore
 			bool				event_disconnected() const;
 			bool				event_cannot_connect() const;
 
-			void				add_block(message_block*);
-
 			message_reader		get_reader() const;
 			message_writer		get_writer() const;
 
-			void				release(imessage_allocator*);
+			void				release(message_allocator*);
 
 			XCORE_CLASS_PLACEMENT_NEW_DELETE
 
 		protected:
-			ipeer*				from_;
-			ipeer*				to_;
+			peer*				from_;
+			peer*				to_;
 			u32					flags_;
-			u32					nblocks_;
-			message_block*		pblocks_;
+			message_block*		pblock_;
 		};
 
 		class outgoing_messages
@@ -164,8 +162,8 @@ namespace xcore
 			inline				 outgoing_messages(message* _message) : message_(_message) {}
 			inline				~outgoing_messages() {}
 
-			ipeer*				get_from() const;
-			ipeer*				get_to() const;
+			peer*				get_from() const;
+			peer*				get_to() const;
 			u32					get_flags() const;
 
 			message_reader		get_reader() const;
@@ -173,6 +171,7 @@ namespace xcore
 			
 			bool				has_message() const;
 			void				enqueue(message*);
+			message*			peek();
 			message*			dequeue();
 
 		protected:
@@ -189,8 +188,8 @@ namespace xcore
 			inline				 incoming_messages(message* _message) : message_(_message) {}
 			inline				~incoming_messages() {}
 
-			bool				is_from(ipeer*) const;
-			ipeer*				get_from();
+			bool				is_from(peer*) const;
+			peer*				get_from();
 			u32					get_flags() const;
 
 			bool				has_event() const;
@@ -212,27 +211,27 @@ namespace xcore
 			message*			message_;
 		};
 
-		class gc_messages
+		class garbagec_messages
 		{
 		public:
-			inline				 gc_messages() : message_(NULL) {}
-			inline				 gc_messages(message* _message) : message_(_message) {}
-			inline				~gc_messages() {}
+			inline				 garbagec_messages() : message_(NULL) {}
+			inline				 garbagec_messages(message* _message) : message_(_message) {}
+			inline				~garbagec_messages() {}
 
 			bool				has_message() const;
 			void				enqueue(message*);
 			message*			dequeue();
 
 		protected:
-			inline				gc_messages(const gc_messages&) {}
+			inline				garbagec_messages(const garbagec_messages&) {}
 
 			message*			message_;
 		};
 
-		class imessage_allocator
+		class message_allocator
 		{
 		public:
-			virtual message*		allocate(ipeer* _from, ipeer* _to, u32 _flags) = 0;
+			virtual message*		allocate(peer* _from, peer* _to, u32 _flags) = 0;
 			virtual void			deallocate(message*) = 0;
 
 			virtual message_block*	allocate(u32 _flags, u32 _size) = 0;

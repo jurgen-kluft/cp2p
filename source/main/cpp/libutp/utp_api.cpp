@@ -4,25 +4,6 @@
 
 extern "C" {
 
-const char * utp_callback_names[] = {
-	"UTP_ON_FIREWALL",
-	"UTP_ON_ACCEPT",
-	"UTP_ON_CONNECT",
-	"UTP_ON_ERROR",
-	"UTP_ON_READ",
-	"UTP_ON_OVERHEAD_STATISTICS",
-	"UTP_ON_STATE_CHANGE",
-	"UTP_GET_READ_BUFFER_SIZE",
-	"UTP_ON_DELAY_SAMPLE",
-	"UTP_GET_UDP_MTU",
-	"UTP_GET_UDP_OVERHEAD",
-	"UTP_GET_MILLISECONDS",
-	"UTP_GET_MICROSECONDS",
-	"UTP_GET_RANDOM",
-	"UTP_LOG",
-	"UTP_SENDTO",
-};
-
 const char * utp_error_code_names[] = {
 	"UTP_ECONNREFUSED",
 	"UTP_ECONNRESET",
@@ -46,15 +27,18 @@ struct_utp_context::struct_utp_context()
 	, log_debug(false)
 {
 	memset(&context_stats, 0, sizeof(context_stats));
-	memset(callbacks, 0, sizeof(callbacks));
-	target_delay = CCONTROL_TARGET;
-	utp_sockets = new UTPSocketHT;
+	
+	events = NULL;
+	system = NULL;
+	logger = NULL;
 
-	callbacks[UTP_GET_UDP_MTU]      = &utp_default_get_udp_mtu;
-	callbacks[UTP_GET_UDP_OVERHEAD] = &utp_default_get_udp_overhead;
-	callbacks[UTP_GET_MILLISECONDS] = &utp_default_get_milliseconds;
-	callbacks[UTP_GET_MICROSECONDS] = &utp_default_get_microseconds;
-	callbacks[UTP_GET_RANDOM]       = &utp_default_get_random;
+	target_delay = CCONTROL_TARGET;
+
+	//callbacks[UTP_GET_UDP_MTU]      = &utp_default_get_udp_mtu;
+	//callbacks[UTP_GET_UDP_OVERHEAD] = &utp_default_get_udp_overhead;
+	//callbacks[UTP_GET_MILLISECONDS] = &utp_default_get_milliseconds;
+	//callbacks[UTP_GET_MICROSECONDS] = &utp_default_get_microseconds;
+	//callbacks[UTP_GET_RANDOM]       = &utp_default_get_random;
 
 	// 1 MB of receive buffer (i.e. max bandwidth delay product)
 	// means that from  a peer with 200 ms RTT, we cannot receive
@@ -68,16 +52,26 @@ struct_utp_context::struct_utp_context()
 	last_check = 0;
 }
 
-struct_utp_context::~struct_utp_context() {
-	delete this->utp_sockets;
+struct_utp_context::~struct_utp_context() 
+{
+	this->utp_sockets->~UTPSocketHT();
+	this->allocator->utp_deallocate(this->utp_sockets);
 }
 
-utp_context* utp_init (int version)
+utp_context* utp_init(int version, utp_allocator* a, utp_events* e, utp_system* s, utp_logger* l)
 {
 	assert(version == 2);
 	if (version != 2)
 		return NULL;
+
 	utp_context *ctx = new utp_context;
+	ctx->events = e;
+	ctx->system = s;
+	ctx->logger = l;
+	ctx->allocator = a;
+
+	utp_sockets = new UTPSocketHT;
+
 	return ctx;
 }
 
@@ -86,10 +80,10 @@ void utp_destroy(utp_context *ctx) {
 	if (ctx) delete ctx;
 }
 
-void utp_set_callback(utp_context *ctx, int callback_name, utp_callback_t *proc) {
-	assert(ctx);
-	if (ctx) ctx->callbacks[callback_name] = proc;
-}
+//void utp_set_callback(utp_context *ctx, int callback_name, utp_callback_t *proc) {
+//	assert(ctx);
+//	if (ctx) ctx->callbacks[callback_name] = proc;
+//}
 
 void* utp_context_set_userdata(utp_context *ctx, void *userdata) {
 	assert(ctx);

@@ -10,42 +10,42 @@ namespace xcore
 {
 	namespace xp2p
 	{
-		// "Peer ID - Address" Dictionary
-		class peer_registry : public ipeer_registry
+		// "Peer" Dictionary
+		class peer_registry : public peer_registry
 		{
 		public:
-									peer_registry(iallocator* allocator);
+									peer_registry(allocator* allocator);
 			virtual					~peer_registry() {}
 
-			virtual void			register_peer(ipeer* peer);
-			virtual bool			unregister_peer(ipeer* peer);
-			virtual ipeer*			find_peer_by_ip(netip4) const;
+			virtual void			register_peer(peer* peer);
+			virtual bool			unregister_peer(peer* peer);
+			virtual peer*			find_peer_by_ip(netip*) const;
 
 			virtual void			release();
 
 			XCORE_CLASS_PLACEMENT_NEW_DELETE
 
 		private:
-			iallocator*				allocator_;
+			allocator*				allocator_;
 			s32						num_peers_;
-			ipeer*					peers_[1024];
+			peer*					peers_[1024];
 		};
 
-		peer_registry::peer_registry(iallocator* allocator)
+		peer_registry::peer_registry(allocator* allocator)
 			: allocator_(allocator)
 			, num_peers_(0)
 		{
 		
 		}
 
-		void			peer_registry::register_peer(ipeer* peer)
+		void			peer_registry::register_peer(peer* peer)
 		{
 
 			// replace netip4 ?
 			
 		}
 
-		bool			peer_registry::unregister_peer(ipeer* peer)
+		bool			peer_registry::unregister_peer(peer* peer)
 		{
 			for (s32 i = 0; i < num_peers_; ++i)
 			{
@@ -59,11 +59,11 @@ namespace xcore
 			return false;
 		}
 
-		ipeer*			peer_registry::find_peer_by_ip(netip4 ip) const
+		peer*			peer_registry::find_peer_by_ip(netip* ip) const
 		{
 			for (s32 i = 0; i < num_peers_; ++i)
 			{
-				if (peers_[i]->get_ip4() == ip)
+				if (peers_[i]->get_ip() == ip)
 					return peers_[i];
 			}
 			return NULL;
@@ -71,16 +71,16 @@ namespace xcore
 
 		void			peer_registry::release()
 		{
-			iallocator* allocator = allocator_;
+			allocator* _allocator = allocator_;
 			this->~peer_registry();
-			allocator->deallocate(this);
+			_allocator->deallocate(this);
 		}
 
 
-		ipeer_registry*		gCreatePeerRegistry(iallocator* allocator)
+		peer_registry*		gCreatePeerRegistry(allocator* _allocator)
 		{
-			void* mem = allocator->allocate(sizeof(peer_registry), sizeof(void*));
-			ipeer_registry* reg = new (mem) peer_registry(allocator);
+			void* mem = _allocator->allocate(sizeof(peer_registry), sizeof(void*));
+			peer_registry* reg = new (mem) peer_registry(_allocator);
 			return reg;
 		}
 

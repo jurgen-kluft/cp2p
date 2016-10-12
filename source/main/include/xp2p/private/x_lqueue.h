@@ -25,7 +25,7 @@ namespace xcore
 			inline T*		get_next() const						{ return next_; }
 			inline T*		get_prev() const						{ return prev_; }
 
-			inline T*		get() const								{ return next_->get_prev(); }
+			inline T*		get_this() const						{ return next_->get_prev(); }
 
 			inline void		enqueue(T* _item)
 			{

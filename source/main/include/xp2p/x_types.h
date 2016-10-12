@@ -15,29 +15,50 @@ namespace xcore
 	// ==============================================================================================================================
 	namespace xp2p
 	{
-		struct netip4 
+		struct netip
 		{
-			inline		netip4()											{ ip_.uip_ = 0; port_ = 0; }
-			inline		netip4(xbyte n4, xbyte n3, xbyte n2, xbyte n1)		{ ip_.aip_[0] = n4; ip_.aip_[1] = n3; ip_.aip_[2] = n2; ip_.aip_[3] = n1; port_ = 0; }
-
-			netip4&		set_port(u16 _port)									{ port_ = _port; return *this; }
-			u16			get_port() const									{ return port_; }
-
-			bool		operator == (const netip4& _other) const			{ return port_==_other.port_ && ip_.uip_==_other.ip_.uip_; }
-			bool		operator != (const netip4& _other) const			{ return port_!=_other.port_ || ip_.uip_!=_other.ip_.uip_; }
-
-			void		to_string(char* s, u32 l) const;
-			
-			union ip
+			enum etype
 			{
-				u32			uip_;
-				xbyte		aip_[4];
+				NETIP_NONE = 0,
+				NETIP_IPV4 = 4,
+				NETIP_IPV6 = 16,
 			};
 
-			ip			ip_;
-			u16			port_;
-		};
+			inline		netip()												{ type_ = NETIP_NONE; port_ = 0; }
+			inline		netip(etype _type, u16 _port, xbyte* _ip)			{ type_ = _type; port_ = _port;  for (s32 i = 0; i < type_; ++i) { ip_[i] = _ip[i]; } }
 
+			etype		get_type() const									{ return (etype)type_; }
+			u16			get_port() const									{ return port_; }
+
+			bool		is_ip4() const										{ return (etype)type_ == NETIP_IPV4; }
+			bool		is_ip6() const										{ return (etype)type_ == NETIP_IPV6; }
+
+			bool		operator == (const netip& _other) const				{ return is_equal(_other); }
+			bool		operator != (const netip& _other) const				{ return !is_equal(_other); }
+
+			void		to_string(char* s, u32 l) const;
+
+			bool		is_equal(const netip& ip) const
+			{
+				if (type_ == ip.type_)
+				{
+					if (port_ == ip.port_)
+					{
+						for (s32 i = 0; i < type_; ++i)
+						{
+							if (ip_[i] != ip.ip_[i])
+								return false;
+						}
+						return true;
+					}
+				}
+				return false;
+			}
+
+			u16			type_;
+			u16			port_;
+			xbyte		ip_[16];
+		};
 	}
 }
 

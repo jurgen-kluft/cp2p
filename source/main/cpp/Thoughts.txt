@@ -4,3 +4,8 @@ P2P NODE
 - Zer0 copy messaging (send and receive)
 - Event loop (no threading)
 - Peer object based connection, identified using endpoint
+
+UTP
+- Packet allocation is done through an allocator that actually allocates a message_block* so
+  that when it is given back to the layer above, this way we don't require to memcpy the
+  packets.

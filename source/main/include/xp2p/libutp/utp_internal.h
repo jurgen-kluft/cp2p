@@ -8,15 +8,16 @@
 
 #include "xp2p/libutp/utp.h"
 #include "xp2p/libutp/utp_callbacks.h"
+#include "xp2p/libutp/utp_utils.h"
 #include "xp2p/libutp/utp_templates.h"
-#include "xp2p/libutp/utp_hash.h"
 #include "xp2p/libutp/utp_hash.h"
 #include "xp2p/libutp/utp_packedsockaddr.h"
 
 /* These originally lived in utp_config.h */
 #define CCONTROL_TARGET (100 * 1000) // us
 
-enum bandwidth_type_t {
+enum bandwidth_type_t 
+{
 	payload_bandwidth, connect_overhead,
 	close_overhead, ack_overhead,
 	header_overhead, retransmit_overhead
@@ -36,7 +37,8 @@ enum bandwidth_type_t {
 	#endif
 #endif
 
-struct PACKED_ATTRIBUTE RST_Info {
+struct PACKED_ATTRIBUTE RST_Info
+{
 	PackedSockAddr addr;
 	uint32 connid;
 	uint16 ack_nr;
@@ -49,17 +51,20 @@ struct PACKED_ATTRIBUTE RST_Info {
 // checkTimeouts will try to access the second one's already freed memory.
 void UTP_FreeAll(struct UTPSocketHT *utp_sockets);
 
-struct UTPSocketKey {
+struct UTPSocketKey 
+{
 	PackedSockAddr addr;
 	uint32 recv_id;		 // "conn_seed", "conn_id"
 
-	UTPSocketKey(const PackedSockAddr& _addr, uint32 _recv_id) {
+	UTPSocketKey(const PackedSockAddr& _addr, uint32 _recv_id) 
+	{
 		memset(this, 0, sizeof(*this));
 		addr = _addr;
 		recv_id = _recv_id;
 	}
 
-	bool operator == (const UTPSocketKey &other) const {
+	bool operator == (const UTPSocketKey &other) const
+	{
 		return recv_id == other.recv_id && addr == other.addr;
 	}
 
@@ -68,7 +73,8 @@ struct UTPSocketKey {
 	}
 };
 
-struct UTPSocketKeyData {
+struct UTPSocketKeyData
+{
 	UTPSocketKey key;
 	UTPSocket *socket;
 	utp_link_t link;
@@ -77,28 +83,48 @@ struct UTPSocketKeyData {
 #define UTP_SOCKET_BUCKETS 79
 #define UTP_SOCKET_INIT    15
 
-struct UTPSocketHT : utpHashTable<UTPSocketKey, UTPSocketKeyData> {
-	UTPSocketHT() {
-		const int buckets = UTP_SOCKET_BUCKETS;
-		const int initial = UTP_SOCKET_INIT;
-		this->Create(buckets, initial);
-	}
-	~UTPSocketHT() {
-		UTP_FreeAll(this);
-		this->Free();
-	}
-};
 
-struct struct_utp_context {
+typedef utpHashTable<UTPSocketKey, UTPSocketKeyData> utpsockets;
+
+utpsockets*	utp_create_sockets(utp_allocator* a)
+{
+	const int buckets = UTP_SOCKET_BUCKETS;
+	const int initial = UTP_SOCKET_INIT;
+	utpsockets* ht = (utpsockets*)a->utp_allocate(sizeof(utpsockets));
+	ht->Create(buckets, initial);
+	return ht;
+}
+
+void utp_destroy_sockets(utpsockets* s, utp_allocator* a)
+{
+	utp_hash_iterator_t it;
+	UTPSocketKeyData* keyData;
+	while ((keyData = s->Iterate(it)))
+	{
+		a->utp_deallocate(keyData->socket);
+	}
+
+	s->Free();
+	a->utp_deallocate(s);
+}
+
+
+struct struct_utp_context 
+{
 	void *userdata;
-	utp_callback_t* callbacks[UTP_ARRAY_SIZE];
+	
+	utp_events* events;
+	utp_system* system;
+	utp_logger* logger;
+
+	utp_allocator* allocator;
 
 	uint64 current_ms;
 	utp_context_stats context_stats;
 	UTPSocket *last_utp_socket;
 	Array<UTPSocket*> ack_sockets;
 	Array<RST_Info> rst_info;
-	UTPSocketHT *utp_sockets;
+	utpsockets *utp_sockets;
 	size_t target_delay;
 	size_t opt_sndbuf;
 	size_t opt_rcvbuf;

@@ -95,4 +95,24 @@ typedef char * str;
 typedef uint8 bool;
 #endif
 
+// Received Packet
+struct utp_packet_rcvd
+{
+	uint32	sizeofHeader;
+	uint32	sizeofPacket;
+	void*	get_data() const { return (void*)((unsigned char*)this + sizeofHeader); }
+};
+
+
+class utp_allocator
+{
+public:
+	virtual void*			utp_allocate(uint32 _size) = 0;
+	virtual void			utp_deallocate(void*) = 0;
+
+	virtual void*			utp_msg_allocate(uint32 _size) = 0;
+	virtual void			utp_msg_deallocate(void*) = 0;
+};
+
+
 #endif //__UTP_TYPES_H__

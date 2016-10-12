@@ -7,9 +7,11 @@
 #include "xp2p\private\x_allocator.h"
 #include "xp2p\private\x_peer_registry.h"
 #include "xp2p\private\x_netio.h"
-#include "xp2p\private\x_netio_proto.h"
+#include "xp2p\private\x_sockets.h"
 
-#define NOT		false == 
+#include "xp2p/libutp/utp.h"
+#include "xp2p/libutp/utp_callbacks.h"
+#include "xp2p/libutp/utp_utils.h"
 
 namespace xcore
 {
@@ -17,680 +19,170 @@ namespace xcore
 	{
 		class peer_connection;
 
-		
-		class node : public inode
+		class xpeer : public peer, public lqueue<xpeer>
 		{
 		public:
-								node();
-								~node();
-
-			ipeer*				start(netip4 endpoint, iallocator* _allocator, imessage_allocator* _message_allocator);
-			void				stop();
-
-			ipeer*				register_peer(netip4 endpoint);
-			void				unregister_peer(ipeer*);
-
-			void				connect_to(ipeer* peer);
-			void				disconnect_from(ipeer* peer);
-
-			u32					connections(ipeer** _out_peers, u32 _in_max_peers);
-			void				send(outgoing_messages&);
-
-			void				event_wakeup();
-			bool				event_loop(incoming_messages*& _received, gc_messages*& _sent, u32 _ms_to_wait = 0);
-
-		protected:
-			class node_imp;
-			node_imp*			imp_;
-		};
-
-		class peer : public ipeer
-		{
-		public:
-			peer() 
+			xpeer()
 				: is_remote_(false)
 				, status_(INACTIVE)
 				, endpoint_()
+				, lqueue<xpeer>(this)
 			{
 			}
 
 			// peer interface
-			virtual bool		is_remote() const			{ return is_remote_; }
-			virtual estatus		get_status() const			{ return status_; }
-			virtual netip4		get_ip4() const				{ return endpoint_; }
+			virtual bool		is_remote() const { return is_remote_; }
+			virtual estatus		get_status() const { return status_; }
+			virtual netip const* get_ip() const { return &endpoint_; }
 
-			inline bool			is_not_connected() const	{ estatus s = get_status(); return s==0 || s>=DISCONNECT; }
-			inline void			set_status(estatus s)		{ status_ = s; }
+			inline bool			is_not_connected() const { estatus s = get_status(); return s == 0 || s >= DISCONNECT; }
+			inline void			set_status(estatus s) { status_ = s; }
 
 			enum epeer { LOCAL_PEER, REMOTE_PEER };
-			void				init(epeer _peer, estatus _status, netip4 _ip)
+			void				init(epeer _peer, estatus _status, netip* _ip)
 			{
 				is_remote_ = _peer == REMOTE_PEER;
 				status_ = _status;
-				endpoint_ = _ip;
+				endpoint_ = *_ip;
 			}
 
-		protected:
+			XCORE_CLASS_PLACEMENT_NEW_DELETE
+
+			utp_socket*			socket_;
+			sockaddr*			socket_address_;
+			socklen_t			socket_address_len;
+
 			bool				is_remote_;
 			estatus				status_;
-			netip4				endpoint_;
+			netip				endpoint_;
 		};
 
-		class node::node_imp : public peer, public io_protocol, public ns_allocator
+
+		struct xbuffer
+		{
+			xbyte*				_data;
+			size_t				_length;
+			size_t				_cursor;
+		};
+		
+		class xnode : public node, public xpeer, public ns_allocator, public utp_events, public utp_system, public utp_logger
 		{
 		public:
-								node_imp(iallocator* _allocator, imessage_allocator* _message_allocator);
-								~node_imp();
+								xnode();
+								~xnode();
 
-			ipeer*				start(netip4 _endpoint);
+			// ============================================================================================
+			// node interface
+			// ============================================================================================
+
+			peer*				start(netip* endpoint, allocator* _allocator, message_allocator* _message_allocator);
 			void				stop();
 
-			ipeer*				register_peer(netip4 _endpoint);
-			void				unregister_peer(ipeer*);
+			peer*				register_peer(netip* endpoint);
+			void				unregister_peer(peer*);
 
-			void				connect_to(ipeer* _peer);
-			void				disconnect_from(ipeer* _peer);
+			void				connect_to(peer* peer);
+			void				disconnect_from(peer* peer);
 
-			u32					connections(ipeer** _out_peers, u32 _in_max_peers);
-
+			u32					connections(peer** _out_peers, u32 _in_max_peers);
 			void				send(outgoing_messages&);
 
 			void				event_wakeup();
-			bool				event_loop(incoming_messages*& _rcvd, gc_messages*& _sent, u32 _ms_to_wait);
+			bool				event_loop(incoming_messages*& _received, garbagec_messages*& _sent, u32 _ms_to_wait = 0);
 
+			s32					write_messages();
+
+			// ============================================================================================
 			// ns_allocator interface
+			// ============================================================================================
+
 			virtual void*		ns_allocate(u32 _size, u32 _alignment);
 			virtual void		ns_deallocate(void* _old);
 
-			// io_protocol interface
-			virtual io_connection io_open(netip4 _ip);
-			virtual void		io_close(io_connection);
 
-			virtual bool		io_needs_write(io_connection);
-			virtual bool		io_needs_read(io_connection);
+			// ============================================================================================
+			// utp events
+			// ============================================================================================
 
-			virtual s32			io_write(io_connection, io_writer*);
-			virtual s32			io_read(io_connection, io_reader*);
+			virtual int			on_firewall(utp_context *ctx, const struct sockaddr *address, socklen_t address_len);
+			virtual void		on_accept(utp_context *ctx, utp_socket *s, const struct sockaddr *address, socklen_t address_len);
+			virtual void		on_connect(utp_context *ctx, utp_socket *s);
+			virtual void		on_error(utp_context *ctx, utp_socket *s, int error_code);
+			virtual void		on_read(utp_context *ctx, utp_socket *s, const byte *buf, size_t len);
+			virtual void		on_overhead_statistics(utp_context *ctx, utp_socket *s, int send, size_t len, int type);
+			virtual void		on_delay_sample(utp_context *ctx, utp_socket *s, int sample_ms);
+			virtual void		on_state_change(utp_context *ctx, utp_socket *s, int state);
 
-			virtual void		io_callback(io_connection, event, void *evp);
+			// ============================================================================================
+			// utp system
+			// ============================================================================================
+
+			virtual uint16		get_udp_mtu(utp_context *ctx, utp_socket *s, const struct sockaddr *address, socklen_t address_len);
+			virtual uint16		get_udp_overhead(utp_context *ctx, utp_socket *s, const struct sockaddr *address, socklen_t address_len);
+			virtual uint64		get_milliseconds(utp_context *ctx, utp_socket *s);
+			virtual uint64		get_microseconds(utp_context *ctx, utp_socket *s);
+			virtual uint32		get_random(utp_context *ctx, utp_socket *s);
+			virtual size_t		get_read_buffer_size(utp_context *ctx, utp_socket *s);
+			virtual void		log(utp_context *ctx, utp_socket *s, const byte *buf);
+			virtual void		sendto(utp_context *ctx, utp_socket *s, const byte *buf, size_t len, const struct sockaddr *address, socklen_t address_len, uint32 flags);
 
 			XCORE_CLASS_PLACEMENT_NEW_DELETE
 
-			iallocator*			allocator_;
-			imessage_allocator*	message_allocator_;
-			ns_iserver*			server_;
-			
-			lqueue<peer_connection>* inactive_peers_;
-			lqueue<peer_connection>* active_peers_;
+			allocator*			allocator_;
+			message_allocator*	message_allocator_;
+
+			xnet::udpsocket		udp_socket_;
+			utp_context*		utp_context_;
+
+			lqueue<xpeer>*		inactive_peers_;
+			lqueue<xpeer>*		active_peers_;
 
 			incoming_messages	incoming_messages_;
-		};
-
-		class marker32
-		{
-		public:
-			inline				marker32() : text_(0) {}
-			inline				marker32(char const* _str) : text_(0)
-			{
-				const char* s = _str;
-				while (*s != '\0')
-					add(*s++);
-			}
-
-			inline 				operator u32() const							{ return text_; }
-
-			inline marker32&	add(char c)
-			{
-				if (c>='a' && c<='z') c -= 'a';
-				else if (c>='A' && c<='Z') c -= 'A';
-				else if (c>='0' && c<='9') c -= '0';
-				if      (c <  2) text_ = (text_ << 1) | (c & 0x1);
-				else if (c <  4) text_ = (text_ << 2) | (c & 0x3);
-				else if (c <  8) text_ = (text_ << 3) | (c & 0x7);
-				else if (c < 16) text_ = (text_ << 4) | (c & 0xF);
-				else if (c < 32) text_ = (text_ << 5) | (c & 0x1F);
-				return *this;
-			}
-
-		protected:
-			u32					text_;
-		};
-
-		// -------------------------------------------------------------------------------------------
-		// IO Message Writer
-		// -------------------------------------------------------------------------------------------
-
-		class imessage_io_writer
-		{
-		public:
-			virtual s32			write(io_writer*) = 0;
-		};
-		
-		class msg_hdr_io_writer : public imessage_io_writer
-		{
-		public:
-			inline				msg_hdr_io_writer() : size_(0), written_(0), data_(NULL) {}
-			
-			bool				is_done() const
-			{
-				return written_ == size_; 
-			}
-
-			void				init_message(u32 _size, u32 _flags)
-			{
-				marker32 marker("MSGBEGIN");
-				header_[0] = marker;
-				header_[1] = _size;
-				header_[2] = _flags;
-
-				size_ = sizeof(header_);
-				data_ = (xbyte const*)&header_[0];
-				written_ = 0;
-			}
-
-			void				init_block(u32 _size, u32 _flags)
-			{
-				marker32 marker("MSGBLOCK");
-				header_[0] = marker;
-				header_[1] = _size;
-				header_[2] = _flags;
-
-				size_ = sizeof(header_);
-				data_ = (xbyte const*)&header_[0];
-				written_ = 0;
-			}
-
-			void				init_end()
-			{
-				marker32 marker("MSGEND");
-				header_[0] = marker;
-				header_[1] = 0;
-				header_[2] = 0;
-
-				size_ = sizeof(header_);
-				data_ = (xbyte const*)&header_[0];
-				written_ = 0;
-			}
-
-			virtual s32			write(io_writer* _writer)
-			{
-				if (written_ < size_)
-				{
-					s32 const w = _writer->write(data_ + written_, size_ - written_);
-					if (w == -1)
-						return -1;
-					written_ += w;
-				}
-				return written_ == size_ ? 0 : 1;
-			}
-
-		protected:
-			u32					header_[3];	/// { marker, _size, _flags }
-
-			u32					size_;		/// Size = 12
-			u32					written_;
-			xbyte const*		data_;		/// Points to &header_[0]
-		};
-
-		class msg_data_io_writer : public imessage_io_writer
-		{
-		public:
-			inline				msg_data_io_writer() : size_(0), written_(0), data_(NULL) {}
-
-			bool				is_done() const
-			{
-				return written_ == size_; 
-			} 
-
-			void				init(u32 _size, void const* _data)
-			{
-				size_ = _size;
-				data_ = (xbyte const*)_data;
-				written_ = 0;
-			}
-
-			virtual s32			write(io_writer* _writer)
-			{
-				if (written_ < size_)
-				{
-					s32 const w = _writer->write(data_ + written_, size_ - written_);
-					if (w == -1)
-						return -1;
-					written_ += w;
-				}
-				return written_ == size_ ? 0 : 1;
-			}
-
-		protected:
-			u32					size_;		/// _size
-			u32					written_;
-			xbyte const*		data_;		/// _data
-		};
-
-		class peer_io_writer
-		{
-		public:
-			inline				peer_io_writer() 
-				: io_writer_state_(STATE_PREPARE_MESSAGE)
-			{
-
-			}
-
-			// IO message writer
-			enum estate
-			{
-				STATE_PREPARE_MESSAGE = 0,
-				STATE_PREPARE_BLOCK = 1,
-				STATE_WRITE_MESSAGE_HEADER = 10,
-				STATE_WRITE_MESSAGE_END = 11,
-				STATE_WRITE_BLOCK_HEADER = 20,
-				STATE_WRITE_BLOCK_DATA = 30,
-			};
-
-			void				reset()
-			{
-				io_writer_state_ = STATE_PREPARE_MESSAGE;
-			}
-
-			s32					write(outgoing_messages& outgoing_messages, io_writer* iow)
-			{
-				bool everything_ok = true;
-				while (everything_ok)
-				{
-					switch (io_writer_state_)
-					{
-					case STATE_PREPARE_MESSAGE:
-						{
-							// Prepare for another message or message-block
-							if (outgoing_messages.has_message())
-							{
-								io_writer_msg_reader_ = outgoing_messages.get_reader();
-								io_writer_header_.init_message(io_writer_msg_reader_.get_size(), io_writer_msg_reader_.get_flags());
-								io_writer_state_ = STATE_WRITE_MESSAGE_HEADER;
-							}
-							else
-							{
-								/// No more outgoing messages to process so exit
-								return 0;
-							}
-
-						} break;
-					case STATE_PREPARE_BLOCK:
-						{
-							// Prepare for another message or message-block
-							u32 msg_block_size = 0;
-							xbyte const* msg_block_data = NULL;
-							io_writer_msg_reader_.view_data(msg_block_data, msg_block_size);
-							u32 const msg_block_flags = io_writer_msg_reader_.get_flags();
-							io_writer_header_.init_block(msg_block_size, msg_block_flags);
-							io_writer_block_data_.init(msg_block_size, msg_block_data);
-							
-							io_writer_msg_reader_.next_block();
-							io_writer_state_ = STATE_WRITE_BLOCK_HEADER;
-						} break;
-					case STATE_WRITE_MESSAGE_HEADER:
-						{
-							s32 const result = io_writer_header_.write(iow);
-							if (result == 0)
-							{
-								io_writer_state_ = STATE_PREPARE_BLOCK;
-							}
-							else if (result == -1)
-							{
-								// IO error (socket disconnect)
-								return -1;
-							}
-							else
-							{
-								// IO write is full
-								return 1;
-							}
-						} break;
-					case STATE_WRITE_BLOCK_HEADER:
-						{
-							s32 const result = io_writer_header_.write(iow);
-							if (result == 0)
-							{
-								io_writer_state_ = STATE_WRITE_BLOCK_DATA;
-							}
-							else if (result == -1)
-							{
-								// IO error (socket disconnect)
-								return -1;
-							}
-							else
-							{
-								// IO write is full
-								return 1;
-							}
-						} break;
-					case STATE_WRITE_MESSAGE_END:
-						{
-							s32 const result = io_writer_header_.write(iow);
-							if (result == 0)
-							{
-								io_writer_state_ = STATE_PREPARE_MESSAGE;
-							}
-							else if (result == -1)
-							{
-								// IO error (socket disconnect)
-								return -1;
-							}
-							else
-							{
-								// IO write is full
-								return 1;
-							}
-						} break;
-					case STATE_WRITE_BLOCK_DATA:
-						{
-							s32 const result = io_writer_block_data_.write(iow);
-							if (result == 0)
-							{
-								if (io_writer_msg_reader_.has_block())
-								{
-									io_writer_state_ = STATE_PREPARE_BLOCK;
-								}
-								else
-								{
-									io_writer_header_.init_end();
-									io_writer_state_ = STATE_WRITE_MESSAGE_END;
-								}
-							}
-							else if (result == -1)
-							{
-								// IO error (socket disconnect)
-								return -1;
-							}
-							else
-							{
-								// IO write is full
-								return 1;
-							}
-						} break;
-					}
-				}
-				return everything_ok ? 1 : -1;
-			}
-
-			inline bool			needs_write() const
-			{
-				return NOT io_writer_header_.is_done() || NOT io_writer_block_data_.is_done() || io_writer_msg_reader_.has_block();
-			}
-
-			estate				io_writer_state_;
-			msg_hdr_io_writer	io_writer_header_;
-			msg_data_io_writer	io_writer_block_data_;
-			message_reader		io_writer_msg_reader_;
-		};
-
-
-		// -------------------------------------------------------------------------------------------
-		// IO Message Reader
-		// -------------------------------------------------------------------------------------------
-
-		class imessage_io_reader
-		{
-		public:
-			virtual s32			read(io_reader*) = 0;
-		};
-
-		class msg_hdr_io_reader : public imessage_io_reader
-		{
-		public:
-			inline				msg_hdr_io_reader() : size_(0), read_(0), data_(0) { }
-
-			u32					get_size() const					{ return header_[1]; }
-			u32					get_flags() const					{ return header_[2]; }
-
-			bool				is_msg_begin_header() const			{ return header_[0] == marker32("MSGBEGIN"); }
-			bool				is_block_header() const				{ return header_[0] == marker32("MSGBLOCK"); }
-			bool				is_msg_end_header() const			{ return header_[0] == marker32("MSGEND"); }
-
-			void				init()								{ read_ = 0; size_ = sizeof(header_); data_ = (xbyte*)&header_[0]; }
-
-			virtual s32			read(io_reader* _reader)
-			{
-				if (read_ < size_)
-				{
-					s32 const r = _reader->read(data_ + read_, size_ - read_);
-					if (r == -1)
-						return -1;
-					read_ += r;
-				}
-				return read_ == size_ ? 0 : 1;
-			}
-
-		protected:
-			u32					header_[3];	/// { marker, _size, _flags }
-
-			u32					size_;		/// Size = 12
-			u32					read_;
-			xbyte*				data_;		/// Points to &header_[0]
-		};
-
-		class msg_data_io_reader : public imessage_io_reader
-		{
-		public:
-			inline				msg_data_io_reader() : read_(0), size_(0), block_(NULL) { }
-
-			void				init(message_block* _block)			{ block_ = _block; read_ = 0; size_ = _block->get_size(); }
-
-			virtual s32			read(io_reader* _reader)
-			{
-				if (read_ < size_)
-				{
-					s32 const r = _reader->read(block_->get_data() + read_, size_ - read_);
-					if (r == -1)
-						return -1;
-					read_ += r;
-				}
-				return read_ == size_ ? 0 : 1;
-			}
-
-		protected:
-			u32					read_;
-			u32					size_;
-			message_block*		block_;
-		};
-
-		class peer_io_reader
-		{
-		public:
-			inline				peer_io_reader() 
-				: io_reader_state_(STATE_READ_MSG_HEADER)
-				, io_reader_msg_block_(NULL)
-				, io_reader_msg_(NULL)
-			{
-
-			}
-
-			// IO message reader
-			enum estate
-			{
-				STATE_READ_MSG_HEADER = 1,
-				STATE_READ_BLOCK_HEADER = 2,
-				STATE_READ_BLOCK_DATA = 3,
-			};
-
-			void				reset(imessage_allocator* _message_allocator)
-			{
-				io_reader_state_ = STATE_READ_MSG_HEADER;
-				if (io_reader_msg_block_ != NULL)
-				{
-					_message_allocator->deallocate(io_reader_msg_block_);
-					io_reader_msg_block_ = NULL;
-				}
-				if (io_reader_msg_ != NULL)
-				{
-					_message_allocator->deallocate(io_reader_msg_);
-					io_reader_msg_ = NULL;
-				}
-			}
-
-			s32					read(peer* _local_peer, peer* _remote_peer, incoming_messages& _incoming_messages, imessage_allocator* _message_allocator, io_reader* _io_reader)
-			{
-				switch(io_reader_state_)
-				{
-				case STATE_READ_MSG_HEADER:
-					{
-						/// Read message header
-						/// - allocate message
-						/// - continue reading block header
-						s32 const result = io_reader_header_.read(_io_reader);
-						if (result == 0)
-						{
-							if (io_reader_header_.is_msg_begin_header())
-							{
-								io_reader_msg_ = _message_allocator->allocate(_remote_peer, _local_peer, io_reader_header_.get_flags());
-								io_reader_header_.init();
-								io_reader_state_ = STATE_READ_BLOCK_HEADER;
-							}
-							else
-							{
-								// protocol error
-								return -100;
-							}
-						}
-						else if (result == -1)
-						{
-							// IO error (socket disconnect)
-							return -1;
-						}
-					} break;
-				case STATE_READ_BLOCK_HEADER:
-					{
-						/// Read block header
-						/// - if header is 'END' then move to read new message
-						/// - allocate message block
-						/// - move state to STATE_READ_BLOCK_DATA
-						s32 const result = io_reader_header_.read(_io_reader);
-						if (result == 0)
-						{
-							if (io_reader_header_.is_block_header())
-							{
-								u32 block_size = io_reader_header_.get_size();
-								io_reader_msg_block_ = _message_allocator->allocate(io_reader_header_.get_flags(), block_size);
-								io_reader_msg_block_data_.init(io_reader_msg_block_);
-								io_reader_state_ = STATE_READ_BLOCK_DATA;
-							}
-							else if (io_reader_header_.is_msg_end_header())
-							{
-								// push message onto the incoming messages queue
-								_incoming_messages.enqueue(io_reader_msg_);
-
-								// prepare for new incoming message
-								io_reader_msg_ = NULL;
-								io_reader_header_.init();
-								io_reader_state_ = STATE_READ_MSG_HEADER;
-							}
-							else
-							{
-								// protocol error
-								return -100;
-							}
-						}
-						else if (result == -1)
-						{
-							// IO error (socket disconnect)
-							return -1;
-						}
-					} break;
-				case STATE_READ_BLOCK_DATA:
-					{
-						/// Read message block data
-						/// - read block data
-						/// - when block data complete, add block to message
-						/// - move state to STATE_READ_BLOCK_HEADER
-						s32 const result = io_reader_msg_block_data_.read(_io_reader);
-						if (result == 0)
-						{
-							io_reader_msg_->add_block(io_reader_msg_block_);
-							io_reader_msg_block_ = NULL;
-							io_reader_header_.init();
-							io_reader_state_ = STATE_READ_BLOCK_HEADER;
-						}
-						else if (result == -1)
-						{
-							// IO error (socket disconnect)
-							return -1;
-						}
-					} break;
-				}
-				return 0;
-			}
-
-			estate				io_reader_state_;
-			msg_hdr_io_reader	io_reader_header_;
-			message_block*		io_reader_msg_block_;
-			msg_data_io_reader	io_reader_msg_block_data_;
-			message*			io_reader_msg_;
-		};
-
-
-		// -------------------------------------------------------------------------------------------
-		// Peer Connection
-		// -------------------------------------------------------------------------------------------
-		class peer_connection : public peer, public lqueue<peer_connection>
-		{
-		public:
-			peer_connection() 
-				: peer()
-				, lqueue<peer_connection>(this) 
-				, connection_(NULL)
-			{
-			}
-
-			XCORE_CLASS_PLACEMENT_NEW_DELETE
-
-			ns_connection*		connection_;
-
 			outgoing_messages	outgoing_messages_;
-			incoming_messages	incoming_messages_;
-
-			peer_io_writer		io_message_writer_;
-			peer_io_reader		io_message_reader_;
 		};
 
-		node::node_imp::node_imp(iallocator* _allocator, imessage_allocator* _message_allocator)
-			: peer()
-			, allocator_(_allocator)
-			, message_allocator_(_message_allocator)
+
+
+		xnode::xnode()
+			: xpeer()
+			, allocator_(NULL)
+			, message_allocator_(NULL)
 			, inactive_peers_(NULL)
 			, active_peers_(NULL)
 		{
 
 		}
 
-		node::node_imp::~node_imp()
+		xnode::~xnode()
 		{
 
 		}
 
-		ipeer*	node::node_imp::start(netip4 _endpoint)
+		peer*	xnode::start(netip* _endpoint, allocator* _allocator, message_allocator* _message_allocator)
 		{
-			init(peer_connection::LOCAL_PEER, CONNECTED, _endpoint);
+			init(xpeer::LOCAL_PEER, CONNECTED, _endpoint);
 
-			server_ = ns_create_server(this);
-			server_->start(this, this);
+			// Open the UDP socket 
+			udp_socket_.open("0.0.0.0", _endpoint->get_port());
+
 			return this;
 		}
 
-		void	node::node_imp::stop()
+		void	xnode::stop()
 		{
-			server_->release();
+			
 		}
 
-		peer_connection*	_find_peer(lqueue<peer_connection>* _peers, netip4 _endpoint)
+		xpeer*	_find_peer(lqueue<xpeer>* _peers, netip* _endpoint)
 		{
-			peer_connection* peer = NULL;
+			xpeer* peer = NULL;
 			if (_peers == NULL)
 				return peer;
 
-			peer_connection* iter = _peers->get();
+			xpeer* iter = _peers->get_this();
 			while (iter != NULL)
 			{
-				if (iter->get_ip4() == _endpoint)
+				if (iter->get_ip() == _endpoint)
 				{
 					peer = iter;
 					break;
@@ -700,9 +192,9 @@ namespace xcore
 			return peer;
 		}
 
-		ipeer*	node::node_imp::register_peer(netip4 _endpoint)
+		peer*	xnode::register_peer(netip* _endpoint)
 		{
-			peer_connection* peer = _find_peer(inactive_peers_, _endpoint);
+			xpeer* peer = _find_peer(inactive_peers_, _endpoint);
 			if (peer == NULL)
 			{
 				peer = _find_peer(active_peers_, _endpoint);
@@ -710,17 +202,17 @@ namespace xcore
 
 			if (peer == NULL)
 			{
-				void * mem = allocator_->allocate(sizeof(peer_connection), sizeof(void*));
-				peer = new (mem) peer_connection();
-				peer->init(peer_connection::REMOTE_PEER, INACTIVE, _endpoint);
+				void * mem = allocator_->allocate(sizeof(xpeer), sizeof(void*));
+				peer = new (mem) xpeer();
+				peer->init(xpeer::REMOTE_PEER, INACTIVE, _endpoint);
 			}
 
 			return peer;
 		}
 
-		void	node::node_imp::unregister_peer(ipeer* _peer)
+		void	xnode::unregister_peer(peer* _peer)
 		{
-			peer_connection* p = (peer_connection*) _peer;
+			xpeer* p = (xpeer*) _peer;
 			if (p == active_peers_)
 				active_peers_ = active_peers_->get_next();
 			else if (p == inactive_peers_)
@@ -728,32 +220,34 @@ namespace xcore
 			p->dequeue();
 		}
 
-		void	node::node_imp::connect_to(ipeer* _peer)
+		void	xnode::connect_to(peer* _peer)
 		{
 			if (_peer == this)	// Do not connect to ourselves
 				return;
 			
-			peer_connection* p = (peer_connection*) _peer;
-			if (p->connection_ == NULL)
+			xpeer* p = (xpeer*) _peer;
+			if (p->socket_ == NULL)
 			{
-				p->set_status(ipeer::CONNECT);
-				p->connection_ = server_->connect(_peer->get_ip4());
+				p->set_status(peer::CONNECT);
+				p->socket_ = utp_create_socket(utp_context_);
+				utp_connect(p->socket_, p->socket_address_, p->socket_address_len);
 			}
 		}
 
-		void	node::node_imp::disconnect_from(ipeer* _peer)
+		void	xnode::disconnect_from(peer* _peer)
 		{
-			peer_connection* p = (peer_connection*) _peer;
-			server_->disconnect(p->connection_);
-			p->set_status(ipeer::DISCONNECTING);
+			xpeer* p = (xpeer*) _peer;
+			utp_close(p->socket_);
+			p->socket_ = NULL;
+			p->set_status(peer::DISCONNECTING);
 		}
 
-		u32		node::node_imp::connections(ipeer** _out_peers, u32 _in_max_peers)
+		u32		xnode::connections(peer** _out_peers, u32 _in_max_peers)
 		{
 			u32 i = 0;
 			if (active_peers_ != NULL)
 			{
-				peer_connection* iter = active_peers_->get();
+				xpeer* iter = active_peers_->get_this();
 				while (iter != NULL && i < _in_max_peers)
 				{
 					_out_peers[i++] = iter;
@@ -763,180 +257,172 @@ namespace xcore
 			return i;
 		}
 
-		void	node::node_imp::send(outgoing_messages& _msg)
+		void	xnode::send(outgoing_messages& _msg)
 		{
 			message* m = _msg.dequeue();
 			while (m != NULL)
 			{
-				peer_connection* to = (peer_connection*)(m->get_to());
-				to->outgoing_messages_.enqueue(m);
+				outgoing_messages_.enqueue(m);
 				m = _msg.dequeue();
 			}
 		}
 
-		void	node::node_imp::event_wakeup()
+		void	xnode::event_wakeup()
 		{
-			server_->wakeup();
+			
 		}
 
-		bool	node::node_imp::event_loop(incoming_messages*&, gc_messages*& _sent, u32 _ms_to_wait)
+		bool	xnode::event_loop(incoming_messages*&, garbagec_messages*& _sent, u32 _ms_to_wait)
 		{
-			s32 const num_connections = server_->poll(_ms_to_wait);
+
+			
 			return true;
 		}
+		
 
-		// -------------------------------------------------------------------------------------------
-
-		void	node::node_imp::io_callback(io_connection conn, event e, void *evp)
+		s32		xnode::write_messages()
 		{
-			switch (e)
+			if (utp_context_ != NULL)
 			{
-				case io_protocol::EVENT_POLL: 
-					break;
-				case io_protocol::EVENT_ACCEPT: 
+				while (outgoing_messages_.has_message())
+				{
+					message* msg = outgoing_messages_.peek();
+					message_block* msg_block = msg->get_block();
+
+					// Get utp socket that is associated with where this message needs to be sent to.
+					xpeer* to = (xpeer*)msg->get_to();
+
+					size_t sent = utp_write(to->socket_, (void*)msg_block->get_data(), (size_t)msg_block->get_size());
+					if (sent == 0)
 					{
-						peer_connection* pc = (peer_connection*)conn;
-						pc->set_status(ipeer::CONNECTED);
+						break;	// socket no longer writable
+					}
 
-						u32 const flags = (message::MESSAGE_FLAG_EVENT) | (message::MESSAGE_FLAG_EVENT_CONNECTED);
-						message* msg = message_allocator_->allocate(this, pc, flags);
-						incoming_messages_.enqueue(msg);
-
-					} break;
-				case io_protocol::EVENT_CONNECT: 
-					{
-						peer_connection* pc = (peer_connection*)conn;
-						pc->set_status(ipeer::CONNECTED);
-
-						u32 const flags = (message::MESSAGE_FLAG_EVENT) | (message::MESSAGE_FLAG_EVENT_CONNECTED);
-						message* msg = message_allocator_->allocate(this, pc, flags);
-						incoming_messages_.enqueue(msg);
-
-					} break;
-				case io_protocol::EVENT_CLOSE:
-					{
-						peer_connection* pc = (peer_connection*)conn;
-						pc->set_status(ipeer::DISCONNECTED);
-
-						u32 const flags = (message::MESSAGE_FLAG_EVENT) | (message::MESSAGE_FLAG_EVENT_DISCONNECTED);
-						message* msg = message_allocator_->allocate(this, pc, flags);
-						incoming_messages_.enqueue(msg);
-
-					} break;
+					outgoing_messages_.dequeue();
+				}
 			}
+			return -1;
 		}
 
 		// -------------------------------------------------------------------------------------------
+		// ns_allocator
+		// -------------------------------------------------------------------------------------------
 
-		void*		node::node_imp::ns_allocate(u32 _size, u32 _alignment)
+		void*		xnode::ns_allocate(u32 _size, u32 _alignment)
 		{
 			return allocator_->allocate(_size, _alignment);
 		}
 
-		void		node::node_imp::ns_deallocate(void* _old)
+		void		xnode::ns_deallocate(void* _old)
 		{
 			allocator_->deallocate(_old);
 		}
 
 		// -------------------------------------------------------------------------------------------
-
-		io_connection node::node_imp::io_open(netip4 _ip)
-		{
-			// Search in the peer registry, if not found create a new peer connection
-			// Set the key on the peer connection so that we can find it next time
-
-			return NULL;
-		}
-
-		void		node::node_imp::io_close(io_connection ioc)
-		{
-			peer_connection* pc = (peer_connection*)ioc;
-		}
-
-		bool		node::node_imp::io_needs_write(io_connection ioc)
-		{
-			peer_connection* pc = (peer_connection*)ioc;
-			return pc->outgoing_messages_.has_message() || pc->io_message_writer_.needs_write();
-		}
-
-		bool		node::node_imp::io_needs_read(io_connection ioc)
-		{
-			return true;
-		}
-
-		s32			node::node_imp::io_write(io_connection ioc, io_writer* iow)
-		{
-			peer_connection* pc = (peer_connection*)ioc;
-			return pc->io_message_writer_.write(pc->outgoing_messages_, iow);
-		}
-
-		s32			node::node_imp::io_read(io_connection ioc, io_reader* ior)
-		{
-			peer_connection* pc = (peer_connection*)ioc;
-			return pc->io_message_reader_.read(this, pc, pc->incoming_messages_, message_allocator_, ior);
-		}
-
-
-		// -------------------------------------------------------------------------------------------
-		// P2P Node
+		// utp_events
 		// -------------------------------------------------------------------------------------------
 
-		node::node() 
-			: imp_(NULL)
+		int xnode::on_firewall(utp_context *ctx, const struct sockaddr *address, socklen_t address_len)
 		{
+			//debug("Firewall allowing inbound connection\n");
+			return 0;
 		}
 
-		ipeer*				node::start(netip4 _endpoint, iallocator* _allocator, imessage_allocator* _message_allocator)
+		void xnode::on_accept(utp_context *ctx, utp_socket *s, const struct sockaddr *address, socklen_t address_len)
 		{
-			void * mem = _allocator->allocate(sizeof(node::node_imp), sizeof(void*));
-			imp_ = new (mem) node::node_imp(_allocator, _message_allocator);
-			return imp_->start(_endpoint);
-		}
+			//debug("Accepted inbound socket %p\n", s);
+			write_messages();
 
-		void				node::stop()
-		{
-			imp_->stop();
+			// Find peer that matches the [address, address_len]
 
 		}
 
-		ipeer*				node::register_peer(netip4 _endpoint)
+		void xnode::on_connect(utp_context *ctx, utp_socket *s)
 		{
-			return imp_->register_peer(_endpoint);
+
 		}
 
-		void				node::unregister_peer(ipeer* _peer)
+		void xnode::on_error(utp_context *ctx, utp_socket *s, int error_code)
 		{
-			imp_->unregister_peer(_peer);
+			//fprintf(stderr, "Error: %s\n", utp_error_code_names[a->error_code]);
+			utp_close(s);
+			s = NULL;
+			//quit_flag = 1;
+			//exit_code++;
 		}
 
-		void				node::connect_to(ipeer* _peer)
+		void xnode::on_read(utp_context *ctx, utp_socket *s, const byte *buffer, size_t len)
 		{
-			imp_->connect_to(_peer);
+			// Do something with the packet ptr which actually is a message_block*
+			// The byte* buffer that is given here is the data after the utp header, we could
+			// have utplib also pass the packet ptr. The packet ptr could hold a pointer just
+			// before it in memory which points to the start of the message_block. We also
+			// need to add a feature to message_block to hold an original offset into the
+			// buffer.
+			// The result of all this is that utplib will not malloc/free packets anymore but
+			// use a message_allocator*, by doing this we can implement re-use of memory and
+			// reduce the allocation and deallocation behaviour as well as increase performance
+			// by removing memory copy calls.
+
+			utp_read_drained(s);
 		}
 
-		void				node::disconnect_from(ipeer* _peer)
+		void xnode::on_overhead_statistics(utp_context *ctx, utp_socket *s, int send, size_t len, int type)
 		{
-			imp_->disconnect_from(_peer);
+
 		}
 
-		u32					node::connections(ipeer** _out_peers, u32 _in_max_peers)
+		void xnode::on_delay_sample(utp_context *ctx, utp_socket *s, int sample_ms)
 		{
-			return imp_->connections(_out_peers, _in_max_peers);
+
 		}
 
-		void				node::send(outgoing_messages& _msg)
+		void xnode::on_state_change(utp_context *ctx, utp_socket *s, int state)
 		{
-			imp_->send(_msg);
+			//debug("state %d: %s\n", a->state, utp_state_names[a->state]);
+			utp_socket_stats *stats;
+
+			switch (state)
+			{
+			case UTP_STATE_CONNECT:
+			case UTP_STATE_WRITABLE:
+				write_messages();
+				break;
+
+			case UTP_STATE_EOF:
+				//debug("Received EOF from socket; closing\n");
+				utp_close(s);
+				break;
+
+			case UTP_STATE_DESTROYING:
+				//debug("UTP socket is being destroyed; exiting\n");
+
+				stats = utp_get_stats(s);
+				if (stats) {
+					//debug("Socket Statistics:\n");
+					//debug("    Bytes sent:          %d\n", stats->nbytes_xmit);
+					//debug("    Bytes received:      %d\n", stats->nbytes_recv);
+					//debug("    Packets received:    %d\n", stats->nrecv);
+					//debug("    Packets sent:        %d\n", stats->nxmit);
+					//debug("    Duplicate receives:  %d\n", stats->nduprecv);
+					//debug("    Retransmits:         %d\n", stats->rexmit);
+					//debug("    Fast Retransmits:    %d\n", stats->fastrexmit);
+					//debug("    Best guess at MTU:   %d\n", stats->mtu_guess);
+				}
+				else
+				{
+					// debug("No socket statistics available\n");
+				}
+
+				s = NULL;
+				//quit_flag = 1;
+				break;
+			}
 		}
 
-		void				node::event_wakeup()
-		{
-			imp_->event_wakeup();
-		}
+		// -------------------------------------------------------------------------------------------
+		// utp_system
+		// -------------------------------------------------------------------------------------------
 
-		bool				node::event_loop(incoming_messages*& _msgs, gc_messages*& _sent, u32 _wait_in_ms)
-		{
-			return imp_->event_loop(_msgs, _sent, _wait_in_ms);
-		}
 	}
 }

@@ -14,7 +14,7 @@ namespace xcore
 {
 	namespace xp2p
 	{
-		class iallocator
+		class allocator
 		{
 		public:
 			virtual void*	allocate(u32 _size, u32 _alignment) = 0;

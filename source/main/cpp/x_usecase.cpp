@@ -32,7 +32,7 @@ namespace xcore
 		};
 
 
-		class MyAllocator : public iallocator
+		class MyAllocator : public allocator
 		{
 		public:
 								MyAllocator(x_iallocator* inSystemAllocator) : mSystemAllocator(inSystemAllocator) {}
@@ -67,13 +67,13 @@ namespace xcore
 		};
 
 
-		class MyMessageAllocator : public imessage_allocator
+		class MyMessageAllocator : public message_allocator
 		{
 		public:
 								MyMessageAllocator(x_iallocator* inSystemAllocator) : mSystemAllocator(inSystemAllocator) {}
 
 
-			virtual message*	allocate(ipeer* _from, ipeer* _to, u32 _flags)
+			virtual message*	allocate(peer* _from, peer* _to, u32 _flags)
 			{
 				void* mem = mOurAllocator->allocate(sizeof(message), sizeof(void*));
 				message* msg = new (mem) message(_from, _to, _flags);
@@ -98,7 +98,7 @@ namespace xcore
 				mOurAllocator->deallocate(_msg_block);
 			}
 
-			message*				allocate(ipeer* _from, ipeer* _to, u32 _flags, u32 _size)
+			message*				allocate(peer* _from, peer* _to, u32 _flags, u32 _size)
 			{
 				message* message = allocate(_from, _to, _flags);
 				message_block* block = allocate(_flags, _size);
@@ -134,22 +134,26 @@ namespace xcore
 			MyMessageAllocator* ourMessageAllocator = MyMessageAllocator::sCreate(inSystemAllocator, 24 * 1024 * 1024);
 
 			bool start_as_peer = true;
+			xbyte empty_ipv4[] = { 0,0,0,0 };
+			xbyte empty_ipv6[] = { 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 };
 
 			if (start_as_peer)
 			{
-				xp2p::inode* node = gCreateNode(ourSystemAllocator);
-				ipeer* host = node->start(netip4().set_port(51888), ourSystemAllocator, ourMessageAllocator);
+				xp2p::node* node = gCreateNode(ourSystemAllocator);
+				peer* host = node->start(netip(netip::NETIP_IPV4, 51888, empty_ipv4), ourSystemAllocator, ourMessageAllocator);
 
 				// Let's connect to the tracker 
-				ipeer* tracker = node->register_peer(netip4(10, 0, 14, 14).set_port(51888));
+				xbyte tracker_ipv4[] = { 10, 0, 14, 14 };
+				peer* tracker = node->register_peer(netip(netip::NETIP_IPV4, 51888, tracker_ipv4));
 				node->connect_to(tracker);
 
 				// Let's register the LAN multi-cast node
-				ipeer* lpd = node->register_peer(netip4(239, 192, 152, 143).set_port(6771));
+				xbyte multicast_ipv4[] = { 239, 192, 152, 143 };
+				peer* lpd = node->register_peer(netip(netip::NETIP_IPV4, 6771, multicast_ipv4));
 
 				incoming_messages* rcvd_messages;
 				outgoing_messages out_messages;
-				gc_messages* sent_messages;
+				garbagec_messages* sent_messages;
 				while (tracker != NULL)
 				{
 					if (node->event_loop(rcvd_messages, sent_messages, 1000))	// Wait a maximum of 1000 ms
@@ -187,8 +191,8 @@ namespace xcore
 								{
 									message_reader reader = rcvdmsg->get_reader();
 
-									char ip4_str[32];
-									tracker->get_ip4().to_string(ip4_str, sizeof(ip4_str));
+									char ip4_str[65];
+									tracker->get_ip()->to_string(ip4_str, sizeof(ip4_str));
 
 									if (xbfIsSet(rcvdmsg->get_flags(), MSG_FLAG_ANNOUNCE))
 									{
@@ -224,14 +228,14 @@ namespace xcore
 			else
 			{
 				// Start as Tracker
-				xp2p::inode* node = gCreateNode(ourSystemAllocator);
+				xp2p::node* node = gCreateNode(ourSystemAllocator);
 
 				// Let's boot as a tracker which always has peerid '0'
-				netip4 tracker_ep = netip4().set_port(51888);
-				ipeer* tracker = node->start(tracker_ep, ourSystemAllocator, ourMessageAllocator);
+				netip tracker_ep = netip(netip::NETIP_IPV4, 51888, empty_ipv4);
+				peer* tracker = node->start(tracker_ep, ourSystemAllocator, ourMessageAllocator);
 
 				incoming_messages* rcvd_messages;
-				gc_messages* sent_messages;
+				garbagec_messages* sent_messages;
 				while (tracker != NULL)
 				{
 					outgoing_messages out_messages;
@@ -249,7 +253,7 @@ namespace xcore
 						{
 							message* rcvdmsg = rcvd_messages->dequeue();
 
-							ipeer* peer = rcvdmsg->get_from();
+							peer* p = rcvdmsg->get_from();
 							if (rcvdmsg->has_event())
 							{
 								if (rcvdmsg->event_is_connected())
@@ -266,8 +270,8 @@ namespace xcore
 							if (rcvdmsg->has_data())
 							{
 								message_reader reader = rcvdmsg->get_reader();
-								char ip4_str[32];
-								peer->get_ip4().to_string(ip4_str, sizeof(ip4_str));
+								char ip4_str[65];
+								p->get_ip()->to_string(ip4_str, sizeof(ip4_str));
 
 								/// Get a direct pointer to the string (instead of copying)
 								u32 msgStringLen = 0;

@@ -186,6 +186,8 @@ static inline uint64 UTP_GetMicroseconds()
 	return now;
 }
 
+
+
 #define ETHERNET_MTU 1500
 #define IPV4_HEADER_SIZE 20
 #define IPV6_HEADER_SIZE 40
@@ -207,26 +209,31 @@ static inline uint64 UTP_GetMicroseconds()
 #define UDP_IPV6_MTU (ETHERNET_MTU - IPV6_HEADER_SIZE - UDP_HEADER_SIZE - GRE_HEADER_SIZE - PPPOE_HEADER_SIZE - MPPE_HEADER_SIZE - FUDGE_HEADER_SIZE)
 #define UDP_TEREDO_MTU (TEREDO_MTU - IPV6_HEADER_SIZE - UDP_HEADER_SIZE)
 
-uint64 utp_default_get_udp_mtu(utp_callback_arguments *args) {
+uint64 utp_system::default_get_udp_mtu(utp_context *ctx, utp_socket *s, const struct sockaddr *address, socklen_t address_len)
+{
 	// Since we don't know the local address of the interface,
 	// be conservative and assume all IPv6 connections are Teredo.
-	return (args->address->sa_family == AF_INET6) ? UDP_TEREDO_MTU : UDP_IPV4_MTU;
+	return (address->sa_family == AF_INET6) ? UDP_TEREDO_MTU : UDP_IPV4_MTU;
 }
 
-uint64 utp_default_get_udp_overhead(utp_callback_arguments *args) {
+uint64 utp_system::default_get_udp_overhead(utp_context *ctx, utp_socket *s, const struct sockaddr *address, socklen_t address_len)
+{
 	// Since we don't know the local address of the interface,
 	// be conservative and assume all IPv6 connections are Teredo.
-	return (args->address->sa_family == AF_INET6) ? UDP_TEREDO_OVERHEAD : UDP_IPV4_OVERHEAD;
+	return (address->sa_family == AF_INET6) ? UDP_TEREDO_OVERHEAD : UDP_IPV4_OVERHEAD;
 }
 
-uint64 utp_default_get_random(utp_callback_arguments *args) {
+uint64 utp_system::default_get_random(utp_context *ctx, utp_socket *s)
+{
 	return rand();
 }
 
-uint64 utp_default_get_milliseconds(utp_callback_arguments *args) {
+uint64 utp_system::default_get_milliseconds(utp_context *ctx, utp_socket *s)
+{
 	return UTP_GetMilliseconds();
 }
 
-uint64 utp_default_get_microseconds(utp_callback_arguments *args) {
+uint64 utp_system::default_get_microseconds(utp_context *ctx, utp_socket *s)
+{
 	return UTP_GetMicroseconds();
 }
