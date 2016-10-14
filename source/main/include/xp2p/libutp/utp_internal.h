@@ -18,9 +18,12 @@
 
 enum bandwidth_type_t 
 {
-	payload_bandwidth, connect_overhead,
-	close_overhead, ack_overhead,
-	header_overhead, retransmit_overhead
+	payload_bandwidth, 
+	connect_overhead,
+	close_overhead,
+	ack_overhead,
+	header_overhead, 
+	retransmit_overhead
 };
 
 #ifdef WIN32
@@ -68,7 +71,8 @@ struct UTPSocketKey
 		return recv_id == other.recv_id && addr == other.addr;
 	}
 
-	uint32 compute_hash() const {
+	uint32 compute_hash() const 
+	{
 		return recv_id ^ addr.compute_hash();
 	}
 };

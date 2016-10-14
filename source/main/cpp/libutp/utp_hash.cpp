@@ -128,22 +128,31 @@ void *utp_hash_add(utp_hash_t **hashp, const void *key)
 	utp_hash_t *hash = *hashp;
 	utp_link_t idx = utp_hash_mkidx(hash, key);
 
-	if ((elem=hash->free) == LIBUTP_HASH_UNUSED) {
+	if ((elem=hash->free) == LIBUTP_HASH_UNUSED)
+	{
 		utp_link_t all = hash->allocated;
-		if (hash->used == all) {
+		if (hash->used == all)
+		{
 			utp_hash_t *nhash;
-			if (all <= (LIBUTP_HASH_UNUSED/2)) {
+			if (all <= (LIBUTP_HASH_UNUSED/2))
+			{
 				all *= 2;
-			} else if (all != LIBUTP_HASH_UNUSED) {
+			} 
+			else if (all != LIBUTP_HASH_UNUSED) 
+			{
 				all  = LIBUTP_HASH_UNUSED;
-			} else {
+			}
+			else 
+			{
 				// too many items! can't grow!
 				assert(0);
 				return NULL;
 			}
+
 			// otherwise need to allocate.
 			nhash = (utp_hash_t*)realloc(hash, ALLOCATION_SIZE(hash->N, hash->E, all));
-			if (!nhash) {
+			if (!nhash) 
+			{
 				// out of memory (or too big to allocate)
 				assert(nhash);
 				return NULL;

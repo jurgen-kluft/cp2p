@@ -148,9 +148,7 @@ enum CONN_STATE
 	CS_DESTROY
 };
 
-static const cstr statenames[] = {
-	"UNINITIALIZED", "IDLE","SYN_SENT", "SYN_RECV", "CONNECTED","CONNECTED_FULL","GOT_FIN","DESTROY_DELAY","FIN_SENT","RESET","DESTROY"
-};
+static const cstr statenames[] = { "UNINITIALIZED", "IDLE","SYN_SENT", "SYN_RECV", "CONNECTED","CONNECTED_FULL","GOT_FIN","DESTROY_DELAY","FIN_SENT","RESET","DESTROY" };
 
 struct OutgoingPacket 
 {
@@ -168,6 +166,19 @@ struct SizableCircularBuffer
 	size_t mask;
 	// This is the elements that the circular buffer points to
 	void **elements;
+
+	void construct(uint32 size, utp_allocator* a)
+	{
+		mask = size - 1;
+		elements = (void**)a->utp_allocate(size * sizeof(void*));
+	}
+
+	void destructor(utp_allocator* a)
+	{	// Free all memory occupied by the socket object.
+		for (size_t i = 0; i <= mask; i++)
+			a->utp_deallocate(elements[i]);
+		a->utp_deallocate(elements);
+	}
 
 	void *get(size_t i) const { assert(elements); return elements ? elements[i & mask] : NULL; }
 	void put(size_t i, void *data) { assert(elements); elements[i&mask] = data; }
@@ -1427,9 +1438,8 @@ int UTPSocket::ack_packet(uint16 seq)
 	}
 	retransmit_timeout = rto;
 	rto_timeout = ctx->current_ms + rto;
-	// if need_resend is set, this packet has already
-	// been considered timed-out, and is not included in
-	// the cur_window anymore
+	// if need_resend is set, this packet has already been considered timed-out, 
+	// and is not included in the cur_window anymore
 	if (!pkt->need_resend)
 	{
 		assert(cur_window >= pkt->payload);
@@ -2585,36 +2595,11 @@ UTPSocket::~UTPSocket()
 	removeSocketFromAckList(this);
 
 	// Free all memory occupied by the socket object.
-	for (size_t i = 0; i <= inbuf.mask; i++) 
-	{
-		free(inbuf.elements[i]);
-	}
-	for (size_t i = 0; i <= outbuf.mask; i++)
-	{
-		free(outbuf.elements[i]);
-	}
-	// TODO: The circular buffer should have a destructor
-	free(inbuf.elements);
-	free(outbuf.elements);
+	inbuf.destructor(ctx->allocator);
+	outbuf.destructor(ctx->allocator);
 }
 
-void UTP_FreeAll(struct UTPSocketHT *utp_sockets) 
-{
-	utp_hash_iterator_t it;
-	UTPSocketKeyData* keyData;
-	while ((keyData = utp_sockets->Iterate(it)))
-	{
-		delete keyData->socket;
-	}
-}
-
-void utp_initialize_socket(utp_socket *conn,
-	const struct sockaddr *addr,
-	socklen_t addrlen,
-	bool need_seed_gen,
-	uint32 conn_seed,
-	uint32 conn_id_recv,
-	uint32 conn_id_send)
+void utp_initialize_socket(utp_socket *conn, const struct sockaddr *addr, socklen_t addrlen, bool need_seed_gen, uint32 conn_seed, uint32 conn_id_recv, uint32 conn_id_send)
 {
 	PackedSockAddr psaddr = PackedSockAddr((const SOCKADDR_STORAGE*)addr, addrlen);
 
@@ -2706,10 +2691,10 @@ utp_socket*	utp_create_socket(utp_context *ctx)
 	conn->ssthresh = conn->opt_sndbuf;
 	conn->clock_drift = 0;
 	conn->clock_drift_raw = 0;
-	conn->outbuf.mask = 15;
-	conn->inbuf.mask = 15;
-	conn->outbuf.elements = (void**)calloc(16, sizeof(void*));
-	conn->inbuf.elements = (void**)calloc(16, sizeof(void*));
+
+	conn->inbuf.construct(16, ctx->allocator);
+	conn->outbuf.construct(16, ctx->allocator);
+
 	conn->ida = -1;	// set the index of every new socket in ack_sockets to
 										// -1, which also means it is not in ack_sockets yet
 
