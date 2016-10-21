@@ -279,6 +279,10 @@ namespace xcore
 
 		void	on_monitor_update(u64 current_time_us)
 		{
+		}
+
+		void	on_monitor_start(u64 current_time_us)
+		{
 			if (m_state == CC_STATE_STARTING_PHASE)
 			{
 				m_start_rate_array[m_current_monitor] = m_previous_rate * 2.0;
@@ -353,7 +357,214 @@ namespace xcore
 
 		void	on_monitor_end(u64 current_time_us)
 		{
+			double utility;
+			double t = total;
+			double l = loss;
+			int random_direciton;
 
+			if (l < 0)
+				l = 0;
+
+			if (rtt == 0)
+			{
+				// "RTT cannot be 0!!!"
+			}
+
+			if (previous_rtt == 0)
+				previous_rtt = rtt;
+
+			utility = ((t - l) / time*(1 - 1 / (1 + exp(-100 * (l / t - 0.05)))) - 1 * l / time);
+
+			previous_rtt = rtt;
+			if (endMonitor == 0 && starting_phase)
+				utility /= 2;
+
+			if (starting_phase)
+			{
+				if (endMonitor - 1 > start_previous_monitor)
+				{
+					if (start_previous_monitor == -1)
+					{
+						// "fall back to guess mode"
+						starting_phase = 0;
+						make_guess = 1;
+						setRate(start_rate_array[0]);
+						current_rate = start_rate_array[0];
+						return;
+					}
+					else
+					{
+						// "exit because of loss"
+						// "in monitor" << start_previous_monitor
+						// "fall back to due to loss" << start_rate_array[start_previous_monitor]
+						starting_phase = 0;
+						make_guess = 1;
+						setRate(start_rate_array[start_previous_monitor]);
+						current_rate = start_rate_array[start_previous_monitor];
+						return;
+					}
+				}
+				if (start_previous_utility < utility)
+				{
+					// "moving forward" 
+					// do nothing
+					start_previous_utility = utility;
+					start_previous_monitor = endMonitor;
+					return;
+				}
+				else
+				{
+					starting_phase = 0;
+					make_guess = 1;
+					setRate(start_rate_array[start_previous_monitor]);
+					current_rate = start_rate_array[start_previous_monitor];
+					// "fall back to " << start_rate_array[start_previous_monitor]
+					previous_rate = current_rate;
+					return;
+				}
+
+			}
+
+			if (recording_guess_result)
+			{
+				for (int i = 0; i < NUMBER_OF_PROBE; i++)
+				{
+					if (endMonitor == monitor_bucket[i])
+					{
+						recorded_number++;
+						utility_bucket[i] = utility;
+					}
+				}
+
+				// TODO:
+				//   to let the sender go back to the current sending rate, 
+				//   one way is to let the decision maker stop for another 
+				//   monitor period, which might not be a good option, 
+				//   let's try this first
+				if (recorded_number == NUMBER_OF_PROBE)
+				{
+					recorded_number = 0;
+					double decision = 0;
+					for (int i = 0; i < NUMBER_OF_PROBE; i++)
+					{
+						if (((utility_bucket[i] > utility_bucket[i + 1]) && (rate_bucket[i] > rate_bucket[i + 1])) || ((utility_bucket[i] < utility_bucket[i + 1]) && (rate_bucket[i] < rate_bucket[i + 1])))
+							decision += 1;
+						else
+							decision -= 1;
+						i++;
+					}
+
+					if (decision == 0)
+					{
+						make_guess = 1;
+						recording_guess_result = 0;
+						// "no decision"
+					}
+					else
+					{
+						change_direction = decision > 0 ? 1 : -1;
+						// "change to the direction of" << change_direction
+						recording_guess_result = 0;
+						target_monitor = (current + 1) % MAX_MONITOR_NUMBER;
+						moving_phase_initial = 1;
+						change_intense = 1;
+						change_amount = (continous_guess_count / 2 + 1)*change_intense*change_direction * GRANULARITY * current_rate;
+						previous_utility = 0;
+						continous_guess_count--; continous_guess_count = 0;
+						
+						if (continous_guess_count < 0)
+							continous_guess_count = 0;
+
+						previous_rate = current_rate;
+						current_rate = current_rate + change_amount;
+						target_monitor = (current + 1) % MAX_MONITOR_NUMBER;
+						setRate(current_rate);
+					}
+				}
+
+
+
+			}
+
+			if (moving_phase_initial && endMonitor == target_monitor)
+			{
+				if (current_rate > (t * 12 / time / 1000 + 30) && current_rate > 200)
+				{
+					current_rate = t * 12 / time / 1000;
+					make_guess = 1;
+					moving_phase = 0;
+					moving_phase_initial = 0;
+					change_direction = 0;
+					change_intense = 1;
+					guess_time = 0;
+					continous_guess_count = 0;
+					continous_send = 0;
+					continous_send_count = 0;
+					recording_guess_result = 0;
+					recorded_number = 0;
+					setRate(current_rate);
+					// "system udp call speed limiting, resyncing rate"
+					return;
+				}
+				
+				// "first time moving"
+
+				target_monitor = (current + 1) % MAX_MONITOR_NUMBER;
+				previous_rate = current_rate;
+				previous_utility = utility;
+				change_intense += 1;
+				change_amount = change_intense * m_GRANULARITY * current_rate * change_direction;
+				current_rate = current_rate + change_amount;
+				setRate(current_rate);
+				moving_phase_initial = 0;
+				moving_phase = 1;
+			}
+
+			if (moving_phase && endMonitor == target_monitor)
+			{
+				if (current_rate > (t * 12 / time / 1000 + 30) && current_rate > 200)
+				{
+					current_rate = t * 12 / time / 1000;
+					make_guess = 1;
+					moving_phase = 0;
+					moving_phase_initial = 0;
+					change_direction = 0;
+					change_intense = 1;
+					guess_time = 0;
+					continous_guess_count = 0;
+					continous_send = 0;
+					continous_send_count = 0;
+					recording_guess_result = 0;
+					recorded_number = 0;
+					setRate(current_rate);
+					// "system udp call speed limiting, resyncing rate"
+					return;
+				}
+
+				// "moving faster"
+				current_utility = utility;
+				if (current_utility > previous_utility) 
+				{
+					target_monitor = (current + 1) % MAX_MONITOR_NUMBER;
+					change_intense += 1;
+					previous_utility = current_utility;
+					previous_rate = current_rate;
+					change_amount = change_intense * m_GRANULARITY * current_rate * change_direction;
+					current_rate = current_rate + change_amount;
+					setRate(current_rate);
+				}
+				else 
+				{
+					moving_phase = 0;
+					make_guess = 1;
+					//change_intense+=1;
+					previous_utility = current_utility;
+					previous_rate = current_rate;
+					change_amount = change_intense * GRANULARITY * current_rate * change_direction;
+					current_rate = current_rate - change_amount;
+					setRate(current_rate);
+				}
+			}
 		}
 	};
 
