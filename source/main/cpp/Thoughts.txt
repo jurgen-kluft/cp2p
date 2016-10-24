@@ -9,3 +9,30 @@ UTP
 - Packet allocation is done through an allocator that actually allocates a message_block* so
   that when it is given back to the layer above, this way we don't require to memcpy the
   packets.
+
+
+PoCC (Performance Oriented Congestion Control)
+
+MI - Monitor Interval
+U  - Utility (the value indicating performance = Throughput - Loss)
+
+Why do we need to include timing fields in the to-send packets?
+RTT can be computed from remembering when a packet was send and when we received
+an ACK for this packet.
+The only info in a packet is
+- flags(1)
+- connection-id(2)  ? Do we need this
+- sequence-nr(2)
+- ACK(5)
+- receiver-delay-us(2)  ! The delay at the receiver side before sending back ACKs
+
+
+
+(A) - packet 1:1 --> send --> wire --> receive --> packet 1 - (B)
+
+(A) remember 1:1 and the time it was sent
+(B) remember 1:1 and the time it was received
+    when sending back an ACK we can figure out how much time was spend before it was
+	send back and include that as micro-seconds in the packet.
+
+(A) receives back a packet that includes
