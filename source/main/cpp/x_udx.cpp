@@ -6,6 +6,32 @@
 
 namespace xcore
 {
+	/*
+	PCC:
+		States:
+			- Starting Phase
+				- Ends when Utility(t) < Utility(t-1)
+			- Moving Phase
+				- Guessing
+
+		Current predicament is what we should do when the request of packets to
+		send is not requiring full throughput but just for example 1 mbps?
+		Both the 'Starting Phase' and 'Moving Phase' can be constraint with a
+		target throughput value where the 'Starting Phase' also ends when the
+		target throughput is reached. The 'Moving Phase' can take the target
+		throughput into account by not deviating from it by more than X %.
+
+		When the target throughput changes we get 2 situations:
+		- Decrease; we can do this immediately and we stay in the 'Moving Phase'
+		- Increase; we stay in the 'Moving Phase' and we let PCC increase the
+		            send-rate until it reaches the target rate.
+
+		The 'Target Throughput' computation should be filtered with something
+		like a 'Moving Average Smoothing Filter'.
+
+
+	*/
+
 	static u64 get_time_us()
 	{
 		std::chrono::steady_clock::time_point time = std::chrono::steady_clock::now();
@@ -261,8 +287,8 @@ namespace xcore
 	class udp_socket
 	{
 	public:
-		virtual void		send(udx_packet* pkt) = 0;
-		virtual void		recv(udx_packet*& pkt) = 0;
+		virtual void	send(udx_packet* pkt) = 0;
+		virtual void	recv(udx_packet*& pkt) = 0;
 	};
 
 
@@ -357,7 +383,7 @@ namespace xcore
 	class CC_Sender
 	{
 	public:
-		virtual bool		on_send(u32 packet_size) = 0;
+		virtual bool on_send(u32 packet_size) = 0;
 	};
 
 	// --------------------------------------------------------------------------------------------
@@ -365,7 +391,7 @@ namespace xcore
 	class CC_Receiver
 	{
 	public:
-		virtual void		on_receive(u32 packet_size, u32 packet_seqnr, u32 ack_segnr, u8* ack_data, u32 ack_data_size) = 0;
+		virtual void on_receive(u32 packet_size, u32 packet_seqnr, u32 ack_segnr, u8* ack_data, u32 ack_data_size) = 0;
 	};
 
 	// --------------------------------------------------------------------------------------------
@@ -373,7 +399,7 @@ namespace xcore
 	class CC_Control
 	{
 	public:
-		virtual void		on_control_update() = 0;
+		virtual void on_control_update() = 0;
 	};
 
 	// --------------------------------------------------------------------------------------------
@@ -381,20 +407,20 @@ namespace xcore
 	class CC_Monitor
 	{
 	public:
-		virtual void		on_monitor_update(u64 delta_time_us) = 0;
+		virtual void on_monitor_update(u64 delta_time_us) = 0;
 	};
 
-	
+
 	// --------------------------------------------------------------------------------------------
 	// Generic RTO controller
 	class CC_RTT
 	{
 	public:
-		virtual void		on_send(u32 packet_seqnr) = 0;
-		virtual void		on_receive(u32 ack_segnr, u8* ack_data, u32 ack_data_size) = 0;
+		virtual void on_send(u32 packet_seqnr) = 0;
+		virtual void on_receive(u32 ack_segnr, u8* ack_data, u32 ack_data_size) = 0;
 
-		virtual s64			get_rtt_us() const = 0;
-		virtual s64			get_rto_us() const = 0;
+		virtual s64 get_rtt_us() const = 0;
+		virtual s64 get_rto_us() const = 0;
 	};
 
 
@@ -409,19 +435,19 @@ namespace xcore
 	class PoCC_Sender : public CC_Sender
 	{
 	public:
-		virtual void		set_send_rate(u64 send_rate_bps) = 0;
+		virtual void set_send_rate(u64 send_rate_bps) = 0;
 	};
 
 	class PoCC_Control : public CC_Control
 	{
 	public:
-		virtual void		on_monitor_report(u32 monitor_nr, u32 utility) = 0;
+		virtual void on_monitor_report(u32 monitor_nr, u32 utility) = 0;
 	};
 
 	class PoCC_Utility
 	{
 	public:
-		virtual void		compute_utility(u64 send_bytes, u64 lost_bytes, u64 RTT_us, u32& out_utility) = 0;
+		virtual void compute_utility(u64 send_bytes, u64 lost_bytes, u64 RTT_us, u32& out_utility) = 0;
 	};
 
 	class PoCC_Monitor_Controller : public CC_Monitor, public CC_Receiver
@@ -433,21 +459,21 @@ namespace xcore
 	class PoCC : public PoCC_Sender, public PoCC_Control, public PoCC_Utility, public PoCC_Monitor_Controller
 	{
 	public:
-		virtual bool		on_send(u32 packet_size) = 0;
-		virtual void		set_send_rate(u64 send_rate_bytes_per_second);
+		virtual bool on_send(u32 packet_size) = 0;
+		virtual void set_send_rate(u64 send_rate_bytes_per_second);
 
 		virtual void		on_receive(u32 packet_size, u32 packet_seqnr, u32 ack_segnr, u8* ack_data, u32 ack_data_size) = 0;
 
-		virtual void		on_control_update();
+		virtual void on_control_update();
 		virtual void		on_monitor_report(u32 monitor_nr, u32 utility) = 0;
 
-		virtual void		compute_utility(u64 transferred_bytes, u64 lost_packets, u64 time_period_us, u64 RTT_us, u32& out_utility);
+		virtual void compute_utility(u64 transferred_bytes, u64 lost_packets, u64 time_period_us, u64 RTT_us, u32& out_utility);
 
 		virtual void		process();
 
 	protected:
-		virtual u32			on_monitor_start(u64 interval_us);
-		virtual void		on_monitor_update(u64 delta_time_us);
+		virtual u32 on_monitor_start(u64 interval_us);
+		virtual void on_monitor_update(u64 delta_time_us);
 	};
 
 	void PoCC::compute_utility(u64 transferred_bytes, u64 lost_packets, u64 time_period_us, u64 RTT_us, u32& out_utility)
@@ -656,7 +682,7 @@ namespace xcore
 				}
 				if (start_previous_utility < utility)
 				{
-					// "moving forward" 
+					// "moving forward"
 					// do nothing
 					start_previous_utility = utility;
 					start_previous_monitor = endMonitor;
@@ -687,9 +713,9 @@ namespace xcore
 				}
 
 				// TODO:
-				//   to let the sender go back to the current sending rate, 
-				//   one way is to let the decision maker stop for another 
-				//   monitor period, which might not be a good option, 
+				//   to let the sender go back to the current sending rate,
+				//   one way is to let the decision maker stop for another
+				//   monitor period, which might not be a good option,
 				//   let's try this first
 				if (recorded_number == NUMBER_OF_PROBE)
 				{
@@ -721,7 +747,7 @@ namespace xcore
 						change_amount = (continous_guess_count / 2 + 1)*change_intense*change_direction * GRANULARITY * current_rate;
 						previous_utility = 0;
 						continous_guess_count--; continous_guess_count = 0;
-						
+
 						if (continous_guess_count < 0)
 							continous_guess_count = 0;
 
@@ -756,7 +782,7 @@ namespace xcore
 					// "system udp call speed limiting, resyncing rate"
 					return;
 				}
-				
+
 				// "first time moving"
 
 				target_monitor = (current + 1) % MAX_MONITOR_NUMBER;
@@ -793,7 +819,7 @@ namespace xcore
 
 				// "moving faster"
 				current_utility = utility;
-				if (current_utility > previous_utility) 
+				if (current_utility > previous_utility)
 				{
 					target_monitor = (current + 1) % MAX_MONITOR_NUMBER;
 					change_intense += 1;
@@ -803,7 +829,7 @@ namespace xcore
 					current_rate = current_rate + change_amount;
 					setRate(current_rate);
 				}
-				else 
+				else
 				{
 					moving_phase = 0;
 					make_guess = 1;
@@ -822,7 +848,7 @@ namespace xcore
 	MSS: is the maximum segment size
 
 	TCP: ACK - SACK
-		
+
 		When sending ACK data to acknowledge the receipt of packets to the sender we advance the receive queue to the
 		point where there is a gap in the seqnr, we then send ack_seqnr = seqnr-1.
 
@@ -871,62 +897,3 @@ namespace xcore
 		RTO' := SRTT + 4 * RTTVAR
 */
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
