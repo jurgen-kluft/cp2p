@@ -39,6 +39,69 @@ namespace xcore
 		return (u64)ns.count();
 	}
 
+	struct udx_message
+	{
+		void*			data_ptr;
+		u32				data_size;
+	};
+
+	// Packet book-keeping and information header for internal use.
+	// Current size = 4 + 4 + 8 + 8 + sizeof(void*) + 4 + 4 = 40 bytes.
+	struct udx_packet_node	// align(8)
+	{
+		u32				m_magic_marker_begin;
+		u32				m_flags : 8;
+		u32				m_transmissions : 23;
+		u32				m_need_resend : 1;
+		u64				m_timestamp_send_us;
+		u64				m_timestamp_rcvd_us;
+		udx_address*	m_to_or_from;
+		u32				m_size_in_bytes : 12;
+		u32				m_ref_counter : 20;
+		u32				m_magic_marker_end;
+
+		void			init()
+		{
+			m_magic_marker_begin = 0xBE912BE912;
+			m_flags = 0;
+			m_transmissions = 0;
+			m_need_resend = 0;
+			m_timestamp_send_us = 0;
+			m_timestamp_rcvd_us = 0;
+			m_to_or_from = NULL;
+			m_size_in_bytes = 0;
+			m_ref_counter = 0;
+			m_magic_marker_end = 0xE2D0E2D0;
+
+		}
+	};
+
+	struct udx_packet_hdr
+	{
+		u64				m_header[8];
+	};
+
+	struct udx_packet_msg_hdr
+	{
+		// Packet-header (12) followed by payload in memory
+		u64				m_hdr_pkt_type : 4;
+		u64				m_hdr_pkt_seqnr : 24;
+		u64				m_hdr_ack_seqnr : 24;
+		u64				m_hdr_ack_info : 12;
+	};
+
+	struct udx_packet_ack_hdr
+	{
+		// Packet-header (12) followed by payload in memory
+		u64				m_hdr_pkt_type : 4;
+		u64				m_hdr_pkt_seqnr : 24;
+		u64				m_hdr_ack_seqnr : 24;
+		u64				m_hdr_ack_size : 12;
+	};
+
+
+	// --------------------------------------------------------------------------------------------
+	// [PUBLIC] API
 	class udx_address
 	{
 	public:
@@ -46,6 +109,108 @@ namespace xcore
 		u32						m_hash[4];
 		u32						m_data[16];
 	};
+
+	// --------------------------------------------------------------------------------------------
+	// [PUBLIC] API
+	class udx_allocator
+	{
+	public:
+		virtual void*		alloc(u32 _size) = 0;
+		virtual void		commit(void*, u32 _size) = 0;
+		virtual void		dealloc(void*) = 0;
+	};
+
+	class udx_allocator_for_messages : public udx_allocator
+	{
+		struct alloc_node
+		{
+			alloc_node*	m_prev;
+			u32			m_size;
+			u32			m_refc;
+			alloc_node*	m_next;
+		};
+
+		u8					*m_base_begin, *m_base_end;
+		u8					*m_head;
+
+		u32					m_header_size;
+
+	public:
+		void				init(u64 memory_size, u32 header_size)
+		{
+			m_base_begin = (u8*)_aligned_malloc(memory_size, 8);
+			m_base_end = m_base_begin + memory_size;
+			m_head = m_base_begin;
+			m_header_size = header_size;
+
+			alloc_node* node = (alloc_node*)m_head;
+			node->m_size = 0;
+			node->m_refc = 0;
+			node->m_prev = NULL;
+			node->m_next = NULL;
+		}
+
+		virtual void*		alloc(u32 _size)
+		{
+			// We do not allow to allocate 0 size memory
+			if (_size == 0)
+				return NULL;
+
+			alloc_node* node = (alloc_node*)m_head;
+			if (node->m_size != 0)
+			{
+				commit(_size);
+			}
+
+			node = (alloc_node*)m_head;
+			node->m_refc = 1;
+			node->m_size = _size;
+			u8* msg = (m_head + m_header_size);
+			return msg;
+		}
+
+		virtual void		commit(u32 _size)
+		{
+			alloc_node* node = (alloc_node*)m_head;
+			if (node->m_size!= 0)
+			{
+				node->m_size = m_header_size + ((_size + 3) & 0xfffffff8);
+
+				m_head += node->m_size;
+
+				alloc_node* head = (alloc_node*)m_head;
+				head->m_size = 0;
+				head->m_refc = 0;
+				head->m_prev = node;
+				head->m_next = NULL;
+
+				node->m_next = head;
+			}
+		}
+
+		virtual void		dealloc(void* p)
+		{
+			alloc_node* n = (alloc_node*)((u8*)p - m_header_size);
+			if (--n->m_refc == 0)
+			{
+				// Zero size nodes are 'free' nodes
+				n->m_size = 0;
+
+				if (n->m_prev != NULL && n->m_prev->m_size == 0)
+				{	// Merge with previous
+					n->m_prev->m_next = n->m_next;
+					n = n->m_prev;
+				}
+
+				if (n->m_next != NULL && n->m_next->m_size == 0)
+				{	// Merge with next
+					n->m_next = n->m_next->m_next;
+				}
+
+			}
+		}
+	};
+
 
 	// --------------------------------------------------------------------------------------------
 	// [PUBLIC] API
@@ -67,41 +232,21 @@ namespace xcore
 		virtual void			process(u64 delta_time_us) = 0;
 	};
 
-
-	struct udx_message
+	class udx_packet_queue
 	{
-		void*			data_ptr;
-		u32				data_size;
-	};
+	public:
+		u32				size() const;
 
-	struct udx_packet	// align(8)
-	{
-		// Book-keeping
-		u32				m_magic_marker;
-		u32				m_flags : 8;
-		u32				m_transmissions : 23;
-		u32				m_need_resend : 1;
-		u32				m_size_in_bytes : 12;
-		u32				m_ref_counter : 20;
-		u64				m_timestamp_us;
-		udx_address*	m_to_or_from;
+		void			enqueue(udx_packet* pkt);
+		bool			dequeue(udx_packet*& pkt);
 
-		// Packet-header (12) followed by payload in memory
-		u64				m_hdr_pkt_type : 4;
-		u64				m_hdr_pkt_seqnr : 24;
-		u64				m_hdr_ack_seqnr : 24;
-		u64				m_hdr_ack_info : 12;
+	protected:
+		void			shift(u32 n);
 	};
 
 	class udx_packet_send_queue
 	{
 	public:
-		u32				size() const;
-
-		void			add(u32 seqnr, udx_packet* pkt);
-		udx_packet*		get(u32 seqnr) const;
-
-		u32				remove_ackd();
 
 	private:
 		void			shift(u32 n);
@@ -110,25 +255,10 @@ namespace xcore
 	class udx_packet_recv_queue
 	{
 	public:
-		void			insert(u32 seqnr, udx_packet* pkt);
-		u32				size() const;
-		udx_packet*		remove();
-
 		void			collect_acks(udx_packet*);	// Insert ACK data into a packet
 
 	private:
-		void			shift(u32 n);
 		udx_packet*		get(u32 seqnr) const;
-	};
-
-
-	// --------------------------------------------------------------------------------------------
-	// [PUBLIC] allocator interface
-	class udx_allocator
-	{
-	public:
-		virtual void*		alloc(u32 _size) = 0;
-		virtual void		dealloc(void*) = 0;
 	};
 
 	// --------------------------------------------------------------------------------------------
@@ -328,7 +458,7 @@ namespace xcore
 			return get();
 		}
 
-		u32				get() const
+		virtual u64		get() const
 		{
 			return m_average / m_count;
 		}
@@ -842,6 +972,20 @@ namespace xcore
 				}
 			}
 		}
+	};
+
+
+	class CC_RTT_imp : public CC_RTT
+	{
+	public:
+		virtual void on_send(udx_packet* pkt);
+		virtual void on_receive(u32 ack_segnr, u8* ack_data, u32 ack_data_size);
+
+		virtual s64 get_rtt_us() const;
+		virtual s64 get_rto_us() const;
+
+	protected:
+		udx_packet_send_queue*	m_packets;
 	};
 
 	/*
