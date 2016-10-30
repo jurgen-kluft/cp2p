@@ -291,14 +291,14 @@ namespace xcore
 		{
 			u32 hash[5];
 			data_to_hash(data, size, hash);
-			
+
 			udx_socket* s = find_by_hash(hash);
 			if (s == NULL)
 				return NULL;
 			return s->get_key();
 		}
 
-		virtual udx_address*	add(void const* data, u32 size) 
+		virtual udx_address*	add(void const* data, u32 size)
 		{
 			u32 hash[5];
 			data_to_hash(data, size, hash);
@@ -336,7 +336,7 @@ namespace xcore
 		{	// Take 10 bits to be our index in the bucket array
 			return (hash & 0x3FF0) >> 4;
 		}
-		
+
 		udx_socket*				find_by_key(udx_address* a) const
 		{
 			u32 bidx = hash_to_bucket_index(a->m_hash[0]);
@@ -627,7 +627,7 @@ namespace xcore
 		//  - For every packet add it to the associated udx socket
 		//    If the udx socket doesn't exist create it and verify that
 		//    the packet is a SYN packet
-		// For every 'active' udx socket 
+		// For every 'active' udx socket
 		//  - check time-outs and react to them (e.g. ACK, RTO)
 		//  - update CC
 		// Iterate over all 'active' udx sockets and send their queued packets
@@ -975,69 +975,4 @@ namespace xcore
 	};
 
 
-	class CC_RTT_imp : public CC_RTT
-	{
-	public:
-		virtual void on_send(udx_packet* pkt);
-		virtual void on_receive(u32 ack_segnr, u8* ack_data, u32 ack_data_size);
-
-		virtual s64 get_rtt_us() const;
-		virtual s64 get_rto_us() const;
-
-	protected:
-		udx_packet_send_queue*	m_packets;
-	};
-
-	/*
-	MSS: is the maximum segment size
-
-	TCP: ACK - SACK
-
-		When sending ACK data to acknowledge the receipt of packets to the sender we advance the receive queue to the
-		point where there is a gap in the seqnr, we then send ack_seqnr = seqnr-1.
-
-		An ACK packet should be send every time we drain the UDP socket of data (recv)
-
-	RTT: Smooth RTT, using 'moving' average computation
-
-	TCP: given a new RTT measurement `RTT'
-	http://www.erg.abdn.ac.uk/users/gerrit/dccp/notes/ccid2/rto_estimator/
-
-		RTT : = max(RTT, 1)		// 1 jiffy sampling granularity
-
-		if (this is the first RTT measurement)
-		{
-			SRTT: = RTT
-			mdev : = RTT / 2
-			mdev_max : = max(RTT / 2, 200msec / 4)
-			RTTVAR : = mdev_max
-			rtt_seq : = SND.NXT
-		}
-		else
-		{
-			SRTT'	 := SRTT + 1/8 * (RTT - SRTT)
-
-				if (RTT < SRTT - mdev)
-					mdev'	:= 31/32 * mdev + 1/32 * |RTT - SRTT|
-				else
-					mdev'	:= 3/4   * mdev + 1/4  * |RTT - SRTT|
-
-				if (mdev' > mdev_max)
-				{
-					mdev_max : = mdev'
-					if (mdev_max > RTTVAR)
-						RTTVAR' := mdev_max
-				}
-
-				if (SND.UNA is `after' rtt_seq)
-				{
-					if (mdev_max < RTTVAR)
-						RTTVAR' := 3/4 * RTTVAR + 1/4 * mdev_max
-					rtt_seq  : = SND.NXT
-					mdev_max : = 200msec / 4
-				}
-		}
-
-		RTO' := SRTT + 4 * RTTVAR
-*/
 }
