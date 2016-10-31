@@ -150,6 +150,8 @@ namespace xcore
 
 
 	// --------------------------------------------------------------------------------------------
+			
+		
 	// [PRIVATE] API
 	class udp_socket
 	{
@@ -343,7 +345,7 @@ namespace xcore
 		//  - For every packet add it to the associated udx socket
 		//    If the udx socket doesn't exist create it and verify that
 		//    the packet is a SYN packet
-		// For every 'active' udx socket 
+		// For every 'active' udx socket
 		//  - check time-outs and react to them (e.g. ACK, RTO)
 		//  - update CC
 		// Iterate over all 'active' udx sockets and send their queued packets
