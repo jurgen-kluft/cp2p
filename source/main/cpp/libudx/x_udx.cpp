@@ -1,5 +1,6 @@
 #include "xbase\x_target.h"
 #include "xp2p\x_sha1.h"
+#include "xp2p\libudx\x_udx.h"
 #include "xp2p\private\x_sockets.h"
 
 #include <chrono>
@@ -39,15 +40,11 @@ namespace xcore
 		return (u64)ns.count();
 	}
 
-	struct udx_message
-	{
-		void*			data_ptr;
-		u32				data_size;
-	};
+
 
 	// Packet book-keeping and information header for internal use.
 	// Current size = 4 + 4 + 8 + 8 + sizeof(void*) + 4 + 4 = 40 bytes.
-	struct udx_packet_node	// align(8)
+	struct udx_packet_info : public udx_packet
 	{
 		u32				m_magic_marker_begin;
 		u32				m_flags : 8;
@@ -100,116 +97,6 @@ namespace xcore
 	};
 
 
-	// --------------------------------------------------------------------------------------------
-	// [PUBLIC] API
-	class udx_address
-	{
-	public:
-		u32						m_index;
-		u32						m_hash[4];
-		u32						m_data[16];
-	};
-
-	// --------------------------------------------------------------------------------------------
-	// [PUBLIC] API
-	class udx_allocator
-	{
-	public:
-		virtual void*		alloc(u32 _size) = 0;
-		virtual void		commit(void*, u32 _size) = 0;
-		virtual void		dealloc(void*) = 0;
-	};
-
-	class udx_allocator_for_messages : public udx_allocator
-	{
-		struct alloc_node
-		{
-			alloc_node*	m_prev;
-			u32			m_size;
-			u32			m_refc;
-			alloc_node*	m_next;
-		};
-
-		u8					*m_base_begin, *m_base_end;
-		u8					*m_head;
-
-		u32					m_header_size;
-
-	public:
-		void				init(u64 memory_size, u32 header_size)
-		{
-			m_base_begin = (u8*)_aligned_malloc(memory_size, 8);
-			m_base_end = m_base_begin + memory_size;
-			m_head = m_base_begin;
-			m_header_size = header_size;
-
-			alloc_node* node = (alloc_node*)m_head;
-			node->m_size = 0;
-			node->m_refc = 0;
-			node->m_prev = NULL;
-			node->m_next = NULL;
-		}
-
-		virtual void*		alloc(u32 _size)
-		{
-			// We do not allow to allocate 0 size memory
-			if (_size == 0)
-				return NULL;
-
-			alloc_node* node = (alloc_node*)m_head;
-			if (node->m_size != 0)
-			{
-				commit(_size);
-			}
-
-			node = (alloc_node*)m_head;
-			node->m_refc = 1;
-			node->m_size = _size;
-			u8* msg = (m_head + m_header_size);
-			return msg;
-		}
-
-		virtual void		commit(u32 _size)
-		{
-			alloc_node* node = (alloc_node*)m_head;
-			if (node->m_size!= 0)
-			{
-				node->m_size = m_header_size + ((_size + 3) & 0xfffffff8);
-
-				m_head += node->m_size;
-
-				alloc_node* head = (alloc_node*)m_head;
-				head->m_size = 0;
-				head->m_refc = 0;
-				head->m_prev = node;
-				head->m_next = NULL;
-
-				node->m_next = head;
-			}
-		}
-
-		virtual void		dealloc(void* p)
-		{
-			alloc_node* n = (alloc_node*)((u8*)p - m_header_size);
-			if (--n->m_refc == 0)
-			{
-				// Zero size nodes are 'free' nodes
-				n->m_size = 0;
-
-				if (n->m_prev != NULL && n->m_prev->m_size == 0)
-				{	// Merge with previous
-					n->m_prev->m_next = n->m_next;
-					n = n->m_prev;
-				}
-
-				if (n->m_next != NULL && n->m_next->m_size == 0)
-				{	// Merge with next
-					n->m_next = n->m_next->m_next;
-				}
-
-			}
-		}
-	};
 
 
 	// --------------------------------------------------------------------------------------------
@@ -261,156 +148,6 @@ namespace xcore
 		udx_packet*		get(u32 seqnr) const;
 	};
 
-	// --------------------------------------------------------------------------------------------
-	// [PUBLIC] udx registry of 'address' to 'socket'
-	class udx_registry
-	{
-	public:
-		virtual udx_address*	find(void const* data, u32 size) const = 0;
-		virtual udx_address*	add(void const* data, u32 size) = 0;
-		virtual udx_socket*		find(udx_address* key) = 0;
-		virtual void			add(udx_address* k, udx_socket* v) = 0;
-	};
-
-	// --------------------------------------------------------------------------------------------
-	// [PUBLIC] udx registry of 'address' to 'socket'
-	class udx_registry_imp : public udx_registry
-	{
-	public:
-		virtual void			init(udx_allocator* allocator)
-		{
-			s32 num_buckets = 1024;
-			m_buckets = (bucket*)allocator->alloc(num_buckets * sizeof(bucket));
-			for (s32 i = 0; i < num_buckets; ++i)
-			{
-				m_buckets[i].init(allocator, 2);
-			}
-		}
-
-		virtual udx_address*	find(void const* data, u32 size) const
-		{
-			u32 hash[5];
-			data_to_hash(data, size, hash);
-			
-			udx_socket* s = find_by_hash(hash);
-			if (s == NULL)
-				return NULL;
-			return s->get_key();
-		}
-
-		virtual udx_address*	add(void const* data, u32 size) 
-		{
-			u32 hash[5];
-			data_to_hash(data, size, hash);
-
-			udx_address* a = (udx_address*)m_allocator->alloc(sizeof(udx_address));
-			memcpy(a->m_data, data, size);
-			memcpy(a->m_hash, hash, sizeof(hash));
-			a->m_index = 0;
-			return a;
-		}
-
-		virtual udx_socket*		find(udx_address* k)
-		{
-			udx_socket* s = find_by_key(k);
-			return s;
-		}
-
-		virtual void			add(udx_address* k, udx_socket* v)
-		{
-			u32 hash = k->m_hash[0];
-			u32 bidx = hash_to_bucket_index(hash);
-			m_buckets[bidx].add(m_allocator, k, v);
-		}
-
-	protected:
-		static inline void		data_to_hash(void const* data, u32 size, u32* out_hash)
-		{
-			SHA1_CTX ctx;
-			sha1_init(&ctx);
-			sha1_update(&ctx, (const u8*)data, size);
-			sha1_final(&ctx, (u8*)out_hash);
-		}
-
-		static inline u32		hash_to_bucket_index(u32 hash)
-		{	// Take 10 bits to be our index in the bucket array
-			return (hash & 0x3FF0) >> 4;
-		}
-		
-		udx_socket*				find_by_key(udx_address* a) const
-		{
-			u32 bidx = hash_to_bucket_index(a->m_hash[0]);
-			udx_socket* s = m_buckets[bidx].find(a);
-			return s;
-		}
-
-		udx_socket*				find_by_hash(u32 hash[5]) const
-		{
-			u32 bidx = hash_to_bucket_index(hash[0]);
-			udx_socket* s = m_buckets[bidx].find_by_hash(hash);
-			return s;
-		}
-
-	protected:
-		udx_allocator*			m_allocator;
-
-		struct bucket
-		{
-			u32				m_size;
-			u32				m_max;
-			udx_socket**	m_values;
-
-			void			init(udx_allocator* a, u32 size)
-			{
-				m_size = 0;
-				m_max = size;
-				m_values = (udx_socket**)a->alloc(size * sizeof(void*));
-				for (u32 i = 0; i < size; ++i)
-					m_values[i] = NULL;
-			}
-
-			void			add(udx_allocator* a, udx_address* k, udx_socket* v)
-			{
-				for (u32 i = 0; i < m_size; i++)
-				{
-					if (m_values[i] == v)
-						return;
-				}
-				if (m_size == m_max)
-				{
-					m_max = m_max * 2;
-					udx_socket** values = (udx_socket**)a->alloc(m_max * sizeof(void*));
-					memcpy(values, m_values, m_size * sizeof(void*));
-					a->dealloc(m_values);
-					m_values = values;
-				}
-				m_values[m_size++] = v;
-			}
-
-			udx_socket*		find(udx_address* k)
-			{
-				for (u32 i = 0; i < m_size; i++)
-				{
-					if (m_values[i]->get_key() == k)
-						return m_values[i];
-				}
-				return NULL;
-			}
-
-			udx_socket*		find_by_hash(u32 hash[5])
-			{
-				for (u32 i = 0; i < m_size; i++)
-				{
-					udx_address* a = m_values[i]->get_key();
-					if (memcmp(a->m_hash, hash, sizeof(hash)) == 0)
-						return m_values[i];
-				}
-				return NULL;
-			}
-		};
-		bucket*					m_buckets;
-	};
-
 
 	// --------------------------------------------------------------------------------------------
 	// [PRIVATE] API
@@ -422,19 +159,11 @@ namespace xcore
 	};
 
 
-	// --------------------------------------------------------------------------------------------
-	// [PUBLIC] API
-	class CC_Filter
-	{
-	public:
-		virtual void	init(u64* window, u32 size);
-		virtual u64		add(u64 value) = 0;
-		virtual u64		get() const = 0;
-	};
+
 
 	// --------------------------------------------------------------------------------------------
 	// [PRIVATE] IMP
-	class CC_Filter_SMA : public CC_Filter
+	class udx_filter_SMA : public udx_filter
 	{
 	public:
 		virtual void	init(u64* window, u32 size)
@@ -478,7 +207,7 @@ namespace xcore
 	class udx_socket_imp : public udx_socket
 	{
 	public:
-		udx_socket_imp(udx_allocator* allocator, udx_allocator* msg_allocator);
+		udx_socket_imp(udx_alloc* allocator, udx_alloc* msg_allocator);
 
 		virtual udx_message		alloc_msg(u32 size);
 		virtual void			free_msg(udx_message& msg);
@@ -493,8 +222,8 @@ namespace xcore
 		virtual void			process(u64 delta_time_us);
 
 	protected:
-		udx_allocator*			m_allocator;
-		udx_allocator*			m_pkt_allocator;
+		udx_alloc*				m_allocator;
+		udx_alloc*				m_pkt_allocator;
 
 		xnet::udpsocket*		m_udp_socket;
 
@@ -542,19 +271,6 @@ namespace xcore
 
 
 	// --------------------------------------------------------------------------------------------
-	// Generic RTO controller
-	class CC_RTT
-	{
-	public:
-		virtual void on_send(u32 packet_seqnr) = 0;
-		virtual void on_receive(u32 ack_segnr, u8* ack_data, u32 ack_data_size) = 0;
-
-		virtual s64 get_rtt_us() const = 0;
-		virtual s64 get_rto_us() const = 0;
-	};
-
-
-	// --------------------------------------------------------------------------------------------
 	// [PRIVATE][CPP]
 	// --------------------------------------------------------------------------------------------
 
@@ -589,21 +305,21 @@ namespace xcore
 	class PoCC : public PoCC_Sender, public PoCC_Control, public PoCC_Utility, public PoCC_Monitor_Controller
 	{
 	public:
-		virtual bool on_send(u32 packet_size) = 0;
-		virtual void set_send_rate(u64 send_rate_bytes_per_second);
+		virtual bool		on_send(u32 packet_size);
+		virtual void		set_send_rate(u64 send_rate_bytes_per_second);
 
-		virtual void		on_receive(u32 packet_size, u32 packet_seqnr, u32 ack_segnr, u8* ack_data, u32 ack_data_size) = 0;
+		virtual void		on_receive(u32 packet_size, u32 packet_seqnr, u32 ack_segnr, u8* ack_data, u32 ack_data_size);
 
-		virtual void on_control_update();
-		virtual void		on_monitor_report(u32 monitor_nr, u32 utility) = 0;
+		virtual void		on_control_update();
+		virtual void		on_monitor_report(u32 monitor_nr, u32 utility);
 
-		virtual void compute_utility(u64 transferred_bytes, u64 lost_packets, u64 time_period_us, u64 RTT_us, u32& out_utility);
+		virtual void		compute_utility(u64 transferred_bytes, u64 lost_packets, u64 time_period_us, u64 RTT_us, u32& out_utility);
 
 		virtual void		process();
 
 	protected:
-		virtual u32 on_monitor_start(u64 interval_us);
-		virtual void on_monitor_update(u64 delta_time_us);
+		virtual u32			on_monitor_start(u64 interval_us);
+		virtual void		on_monitor_update(u64 delta_time_us);
 	};
 
 	void PoCC::compute_utility(u64 transferred_bytes, u64 lost_packets, u64 time_period_us, u64 RTT_us, u32& out_utility)
@@ -975,69 +691,4 @@ namespace xcore
 	};
 
 
-	class CC_RTT_imp : public CC_RTT
-	{
-	public:
-		virtual void on_send(udx_packet* pkt);
-		virtual void on_receive(u32 ack_segnr, u8* ack_data, u32 ack_data_size);
-
-		virtual s64 get_rtt_us() const;
-		virtual s64 get_rto_us() const;
-
-	protected:
-		udx_packet_send_queue*	m_packets;
-	};
-
-	/*
-	MSS: is the maximum segment size
-
-	TCP: ACK - SACK
-
-		When sending ACK data to acknowledge the receipt of packets to the sender we advance the receive queue to the
-		point where there is a gap in the seqnr, we then send ack_seqnr = seqnr-1.
-
-		An ACK packet should be send every time we drain the UDP socket of data (recv)
-
-	RTT: Smooth RTT, using 'moving' average computation
-
-	TCP: given a new RTT measurement `RTT'
-	http://www.erg.abdn.ac.uk/users/gerrit/dccp/notes/ccid2/rto_estimator/
-
-		RTT : = max(RTT, 1)		// 1 jiffy sampling granularity
-
-		if (this is the first RTT measurement)
-		{
-			SRTT: = RTT
-			mdev : = RTT / 2
-			mdev_max : = max(RTT / 2, 200msec / 4)
-			RTTVAR : = mdev_max
-			rtt_seq : = SND.NXT
-		}
-		else
-		{
-			SRTT'	 := SRTT + 1/8 * (RTT - SRTT)
-
-				if (RTT < SRTT - mdev)
-					mdev'	:= 31/32 * mdev + 1/32 * |RTT - SRTT|
-				else
-					mdev'	:= 3/4   * mdev + 1/4  * |RTT - SRTT|
-
-				if (mdev' > mdev_max)
-				{
-					mdev_max : = mdev'
-					if (mdev_max > RTTVAR)
-						RTTVAR' := mdev_max
-				}
-
-				if (SND.UNA is `after' rtt_seq)
-				{
-					if (mdev_max < RTTVAR)
-						RTTVAR' := 3/4 * RTTVAR + 1/4 * mdev_max
-					rtt_seq  : = SND.NXT
-					mdev_max : = 200msec / 4
-				}
-		}
-
-		RTO' := SRTT + 4 * RTTVAR
-*/
 }
