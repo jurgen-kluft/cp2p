@@ -7,6 +7,7 @@
 
 namespace xcore
 {
+
 	class udx_ack_iterator
 	{
 	public:
