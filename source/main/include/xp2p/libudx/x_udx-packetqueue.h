@@ -16,6 +16,19 @@ namespace xcore
 	// --------------------------------------------------------------------------------------------
 	// [PUBLIC] API
 
+	// Inserting and removing items could also be tracking intervals, the best would be to have a
+	// seperate interval object which can be allocated/deallocated.
+
+	// A udx_packet_qnode would then have a pointer to the interval that it is currently part of.
+	// When adding a node you check on the left/right, if there is an existing neighbour you take
+	// the pointer to the interval object and you update the interval.
+	// Same with removing, if you are at the extend of the interval you update the interval. If
+	// you are the last of the interval you dealloc the interval object.
+	// This interval object can then be used when the ACK data needs to be constructed, it is fast
+	// because you immediately have the begin and end of the interval. Empty items would not have
+	// an interval although we could make a 'fake' node that we only know internally which points
+	// to an interval that keeps track of non-existing continues item intervals.
+
 	class udx_packetqueue
 	{
 	public:
@@ -124,6 +137,14 @@ namespace xcore
 				}
 				m_items[index] = p;
 			}
+
+			void			interval_item_insert(udx_seqnr seq_nr, ITEM p)
+			{
+
+			}
+
+			void			interval_item_remove(udx_seqnr seqnr)
+
 		};
 		queue			m_queue;
 	};
