@@ -31,46 +31,25 @@ namespace xcore
 		like a 'Moving Average Smoothing Filter'.
 
 
+	1 Gbps ~= 93622 packets per second (average size of packet == 1400 bytes)
+
+	UDX Goal:
+
+	- udx::update(packets_to_send, packets_received) to be able to send 100.000
+	  packets/s as well as receive 100.000 packets/s.
+
+	- udx:update should be called 
+
 	*/
-
-	static u64 get_time_us()
-	{
-		std::chrono::steady_clock::time_point time = std::chrono::steady_clock::now();
-		std::chrono::nanoseconds ns = time.time_since_epoch;
-		return (u64)ns.count();
-	}
-
 
 
 	// Packet book-keeping and information header for internal use.
-	// Current size = 4 + 4 + 8 + 8 + sizeof(void*) + 4 + 4 = 40 bytes.
-	struct udx_packet_info : public udx_packet
+	// Current size = 4 + 4 + 8 + 8 + sizeof(void*) = 32 bytes.
+	// Size should be multiple of 8
+	struct udx_packet_info
 	{
-		u32				m_magic_marker_begin;
-		u32				m_flags : 8;
-		u32				m_transmissions : 23;
-		u32				m_need_resend : 1;
-		u64				m_timestamp_send_us;
-		u64				m_timestamp_rcvd_us;
-		udx_address*	m_to_or_from;
-		u32				m_size_in_bytes : 12;
-		u32				m_ref_counter : 20;
-		u32				m_magic_marker_end;
-
-		void			init()
-		{
-			m_magic_marker_begin = 0xBE912BE912;
-			m_flags = 0;
-			m_transmissions = 0;
-			m_need_resend = 0;
-			m_timestamp_send_us = 0;
-			m_timestamp_rcvd_us = 0;
-			m_to_or_from = NULL;
-			m_size_in_bytes = 0;
-			m_ref_counter = 0;
-			m_magic_marker_end = 0xE2D0E2D0;
-
-		}
+		u32				m_ref_counter : 8;
+		u32				m_crc : 20;
 	};
 
 	struct udx_packet_hdr
@@ -78,23 +57,7 @@ namespace xcore
 		u64				m_header[8];
 	};
 
-	struct udx_packet_msg_hdr
-	{
-		// Packet-header (12) followed by payload in memory
-		u64				m_hdr_pkt_type : 4;
-		u64				m_hdr_pkt_seqnr : 24;
-		u64				m_hdr_ack_seqnr : 24;
-		u64				m_hdr_ack_info : 12;
-	};
 
-	struct udx_packet_ack_hdr
-	{
-		// Packet-header (12) followed by payload in memory
-		u64				m_hdr_pkt_type : 4;
-		u64				m_hdr_pkt_seqnr : 24;
-		u64				m_hdr_ack_seqnr : 24;
-		u64				m_hdr_ack_size : 12;
-	};
 
 
 
@@ -346,11 +309,11 @@ namespace xcore
 		//    If the udx socket doesn't exist create it and verify that
 		//    the packet is a SYN packet
 		// For every 'active' udx socket
-		//  - check time-outs and react to them (e.g. ACK, RTO)
+		//  - update RTT / RTO
 		//  - update CC
-		// Iterate over all 'active' udx sockets and send their queued packets
-		// For every 'active' udx socket see if it has received packets to pass on to
-		//  the user layer.
+		// Iterate over all 'active' udx sockets and construct ACK data
+		// Iterate over all 'active' udx sockets and send their scheduled packets
+		// Iterate over all 'active' udx sockets and collect received packets
 	}
 
 	class PoCC_Monitor_Controller

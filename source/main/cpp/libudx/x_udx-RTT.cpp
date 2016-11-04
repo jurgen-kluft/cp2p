@@ -1,24 +1,33 @@
 #include "xbase\x_target.h"
 #include "xp2p\x_sha1.h"
 #include "xp2p\libudx\x_udx.h"
-#include "xp2p\private\x_sockets.h"
+#include "xp2p\libudx\x_udx-seqnr.h"
+#include "xp2p\libudx\x_udx-packetqueue.h"
 
 #include <chrono>
 
 namespace xcore
 {
-
-	class udx_ack_iterator
+	class udx_ack_builder
 	{
 	public:
-		inline		udx_ack_iterator(u32 ack_seq_nr, u8 const* ack_data, u32 ack_data_size)
+		void	build(udx_packet* p, udx_packetqueue* rcvd_packets)
+		{
+			udx_seqnr ackseqnr;
+		}
+	};
+
+	class udx_ack_iterator_imp : public udx_ack_iterator
+	{
+	public:
+		inline		udx_ack_iterator_imp(u32 ack_seq_nr, u8 const* ack_data, u32 ack_data_size)
 			: m_ack_seq_nr(ack_seq_nr)
 			, m_ack_bit(1)
 			, m_ack_data(ack_data)
 			, m_ack_data_end(ack_data + ack_data_size)
 		{}
 
-		bool		pop(u32& seq_nr)
+		virtual bool		pop(u32& seq_nr)
 		{
 			while ((m_ack_data != m_ack_data_end) && (*m_ack_data & m_ack_bit) == 0)
 			{
@@ -41,46 +50,34 @@ namespace xcore
 		u8 const*	m_ack_data_end;
 	};
 
+
 	class udx_rtt_imp : public udx_rtt
 	{
 	public:
-		virtual void	on_send(udx_packet* pkt)
+		virtual void	on_send(u32 seq_nr, u64 time_stamp_us)
 		{
 
 		}
 
-		virtual void	on_receive(u32 ack_segnr, u8* ack_data, u32 ack_data_size)
+		virtual void	on_receive(udx_ack_iterator& iter, u64 time_stamp_us)
 		{
-
+			
 		}
 
 		virtual s64		get_rtt_us() const
 		{
-
+			return m_rtt;
 		}
 
 		virtual s64		get_rto_us() const
 		{
+			return m_rto;
 		}
 
 	protected:
 		s64				m_rtt;
 		s64				m_rto;
-		udx_alloc*		m_allocator;
-
-		struct packet
-		{
-			u32				m_seq_nr;
-			u64				m_ctime_us;
-		};
-
-		struct queue
-		{
-			u32				m_pivot;
-			u32				m_size;
-			packet*			m_packets;
-		};
-		queue			m_queue;
+		
 	};
 
 	/*
