@@ -4,8 +4,8 @@
 #ifndef __XP2P_UDX_PACKET_QUEUE_H__
 #define __XP2P_UDX_PACKET_QUEUE_H__
 #include "xbase\x_target.h"
-#ifdef USE_PRAGMA_ONCE 
-#pragma once 
+#ifdef USE_PRAGMA_ONCE
+#pragma once
 #endif
 
 #include "xp2p\libudx\x_udx.h"
@@ -13,17 +13,21 @@
 
 namespace xcore
 {
+
 	// --------------------------------------------------------------------------------------------
 	// [PUBLIC] API
 
 	// Inserting and removing items could also be tracking intervals, the best would be to have a
 	// seperate interval object which can be allocated/deallocated.
 
+	// Should we track ==NULL runs and !=NULL runs ? This means tracking received and non-received
+	// packages and being able to encode that information in a (RLE?) bit-stream.
+
 	// A udx_packet_qnode would then have a pointer to the interval that it is currently part of.
 	// When adding a node you check on the left/right, if there is an existing neighbour you take
 	// the pointer to the interval object and you update the interval.
 	// Same with removing, if you are at the extend of the interval you update the interval. If
-	// you are the last of the interval you dealloc the interval object.
+	// you are the last (ref-count) of the interval you dealloc the interval object.
 	// This interval object can then be used when the ACK data needs to be constructed, it is fast
 	// because you immediately have the begin and end of the interval. Empty items would not have
 	// an interval although we could make a 'fake' node that we only know internally which points
@@ -73,7 +77,7 @@ namespace xcore
 			seqnr = m_queue.m_qhead;
 			len = 0;
 			for (s32 i = 0; i < m_queue.m_qcount; ++i)
-			{ 
+			{
 				if (m_queue.get(seqnr) == NULL)
 					break;
 				len += 1;
@@ -83,6 +87,12 @@ namespace xcore
 		}
 
 	protected:
+		struct interval
+		{
+			udx_seqnr	m_begin;
+			udx_seqnr	m_end;
+		};
+
 		struct queue
 		{
 			udx_seqnr		m_qhead;

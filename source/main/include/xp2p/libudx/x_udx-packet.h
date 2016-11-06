@@ -4,8 +4,8 @@
 #ifndef __XP2P_UDX_PACKET_H__
 #define __XP2P_UDX_PACKET_H__
 #include "xbase\x_target.h"
-#ifdef USE_PRAGMA_ONCE 
-#pragma once 
+#ifdef USE_PRAGMA_ONCE
+#pragma once
 #endif
 
 #include "xp2p\libudx\x_udx-seqnr.h"
@@ -38,12 +38,18 @@ namespace xcore
 		udx_address*			m_remote_endpoint;
 	};
 
-	struct udx_packet_qnode
+	struct udx_interval
 	{
 		udx_seqnr				m_interval[2];
+		u32						m_refcount;
+	};
 
-		udx_packet*				get_inf()						{ return (udx_packet*)((u8*)this - sizeof(udx_packet_inf)); }
-		udx_packet const*		get_inf() const					{ return (udx_packet const*)((u8 const*)this - sizeof(udx_packet_inf)); }
+	struct udx_packet_qnode
+	{
+		udx_interval*			m_interval;
+
+		udx_packet*				get_pkt()						{ return (udx_packet*)((u8*)this - sizeof(udx_packet_inf)); }
+		udx_packet const*		get_pkt() const					{ return (udx_packet const*)((u8 const*)this - sizeof(udx_packet_inf)); }
 	};
 
 	// 64 bytes
