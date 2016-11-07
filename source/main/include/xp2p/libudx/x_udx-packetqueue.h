@@ -10,28 +10,13 @@
 
 #include "xp2p\libudx\x_udx.h"
 #include "xp2p\libudx\x_udx-seqnr.h"
+#include "xp2p\libudx\x_udx-bitstream.h"
 
 namespace xcore
 {
 
 	// --------------------------------------------------------------------------------------------
 	// [PUBLIC] API
-
-	// Inserting and removing items could also be tracking intervals, the best would be to have a
-	// seperate interval object which can be allocated/deallocated.
-
-	// Should we track ==NULL runs and !=NULL runs ? This means tracking received and non-received
-	// packages and being able to encode that information in a (RLE?) bit-stream.
-
-	// A udx_packet_qnode would then have a pointer to the interval that it is currently part of.
-	// When adding a node you check on the left/right, if there is an existing neighbour you take
-	// the pointer to the interval object and you update the interval.
-	// Same with removing, if you are at the extend of the interval you update the interval. If
-	// you are the last (ref-count) of the interval you dealloc the interval object.
-	// This interval object can then be used when the ACK data needs to be constructed, it is fast
-	// because you immediately have the begin and end of the interval. Empty items would not have
-	// an interval although we could make a 'fake' node that we only know internally which points
-	// to an interval that keeps track of non-existing continues item intervals.
 
 	class udx_packetqueue
 	{
@@ -101,6 +86,8 @@ namespace xcore
 			u32				m_qsize;
 			ITEM*			m_items;
 			udx_alloc*		m_allocator;
+			u32*			m_marksdata;
+			udx_bitstream	m_marks;
 
 			void			reset()
 			{
@@ -109,6 +96,8 @@ namespace xcore
 				m_qcount = 0;
 				m_qsize = 4096;
 				m_items = (ITEM*)m_allocator->alloc(sizeof(ITEM) * m_qsize);
+				m_marksdata = (u32*)m_allocator->alloc(m_qsize / (sizeof(u32) * 8));
+				m_marks.set_stream(m_marksdata, m_qsize / (sizeof(u32) * 8));
 			}
 
 			ITEM			get(udx_seqnr seq_nr)
@@ -127,6 +116,7 @@ namespace xcore
 				if (p != NULL)
 				{
 					m_items[index] = NULL;
+					m_marks.set_false(index);
 					m_qhead.inc();
 					m_qcount--;
 				}
@@ -145,15 +135,9 @@ namespace xcore
 
 					m_qcount++;
 				}
+				m_marks.set_true(index);
 				m_items[index] = p;
 			}
-
-			void			interval_item_insert(udx_seqnr seq_nr, ITEM p)
-			{
-
-			}
-
-			void			interval_item_remove(udx_seqnr seqnr)
 
 		};
 		queue			m_queue;

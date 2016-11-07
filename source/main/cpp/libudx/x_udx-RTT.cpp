@@ -8,48 +8,7 @@
 
 namespace xcore
 {
-	class udx_ack_builder
-	{
-	public:
-		void	build(udx_packet* p, udx_packetqueue* rcvd_packets)
-		{
-			udx_seqnr ackseqnr;
-		}
-	};
-
-	class udx_ack_iterator_imp : public udx_ack_iterator
-	{
-	public:
-		inline		udx_ack_iterator_imp(u32 ack_seq_nr, u8 const* ack_data, u32 ack_data_size)
-			: m_ack_seq_nr(ack_seq_nr)
-			, m_ack_bit(1)
-			, m_ack_data(ack_data)
-			, m_ack_data_end(ack_data + ack_data_size)
-		{}
-
-		virtual bool		pop(u32& seq_nr)
-		{
-			while ((m_ack_data != m_ack_data_end) && (*m_ack_data & m_ack_bit) == 0)
-			{
-				m_ack_seq_nr++;
-				m_ack_bit <<= 1;
-				if (m_ack_bit == 0x100)
-				{
-					m_ack_bit = 1;
-					m_ack_data++;
-				}
-			}
-			seq_nr = m_ack_seq_nr;
-			return (m_ack_data != m_ack_data_end);
-		}
-
-	protected:
-		u32			m_ack_seq_nr;
-		u32			m_ack_bit;
-		u8 const*	m_ack_data;
-		u8 const*	m_ack_data_end;
-	};
-
+	
 
 	class udx_rtt_imp : public udx_rtt
 	{

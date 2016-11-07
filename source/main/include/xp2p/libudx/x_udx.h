@@ -53,15 +53,6 @@ namespace xcore
 
 	// --------------------------------------------------------------------------------------------
 	// [PUBLIC] API
-	class udx_ack_iterator
-	{
-	public:
-		virtual bool		pop(u32& seq_nr) = 0;
-	};
-
-
-	// --------------------------------------------------------------------------------------------
-	// [PUBLIC] API
 	class udx_alloc
 	{
 	public:
@@ -93,17 +84,6 @@ namespace xcore
 	};
 
 
-	// --------------------------------------------------------------------------------------------
-	// Generic RTT computer
-	class udx_rtt
-	{
-	public:
-		virtual void on_send(u32 packet_seqnr) = 0;
-		virtual void on_receive(u32 ack_segnr, u8* ack_data, u32 ack_data_size) = 0;
-
-		virtual s64 get_rtt_us() const = 0;
-		virtual s64 get_rto_us() const = 0;
-	};
 
 }
 
