@@ -1,6 +1,7 @@
 #include "xbase\x_target.h"
 #include "xp2p\x_sha1.h"
 #include "xp2p\libudx\x_udx.h"
+#include "xp2p\libudx\x_udx-packet.h"
 #include "xp2p\private\x_sockets.h"
 
 #include <chrono>
@@ -57,59 +58,6 @@ namespace xcore
 		u64				m_header[8];
 	};
 
-
-
-
-
-
-	// --------------------------------------------------------------------------------------------
-	// [PUBLIC] API
-	class udx_socket
-	{
-	public:
-		virtual udx_address*	get_key() const = 0;
-
-		virtual udx_message		alloc_msg(u32 size) = 0;
-		virtual void			free_msg(udx_message& msg) = 0;
-
-		virtual udx_address*	connect(const char* address) = 0;
-		virtual bool			disconnect(udx_address*) = 0;
-
-		virtual void			send(udx_message& msg, udx_address* to) = 0;
-		virtual bool			recv(udx_message& msg, udx_address*& from) = 0;
-
-		// Process time-outs and deal with re-transmitting, disconnecting etc..
-		virtual void			process(u64 delta_time_us) = 0;
-	};
-
-	class udx_packet_queue
-	{
-	public:
-		u32				size() const;
-
-		void			enqueue(udx_packet* pkt);
-		bool			dequeue(udx_packet*& pkt);
-
-	protected:
-		void			shift(u32 n);
-	};
-
-	class udx_packet_send_queue
-	{
-	public:
-
-	private:
-		void			shift(u32 n);
-	};
-
-	class udx_packet_recv_queue
-	{
-	public:
-		void			collect_acks(udx_packet*);	// Insert ACK data into a packet
-
-	private:
-		udx_packet*		get(u32 seqnr) const;
-	};
 
 
 	// --------------------------------------------------------------------------------------------

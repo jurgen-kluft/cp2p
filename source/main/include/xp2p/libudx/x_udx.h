@@ -43,16 +43,6 @@ namespace xcore
 
 	// --------------------------------------------------------------------------------------------
 	// [PUBLIC] API
-	struct udx_packet_info;
-	struct udx_packet_hdr;
-
-	struct udx_packet	// align(8)
-	{
-
-	};
-
-	// --------------------------------------------------------------------------------------------
-	// [PUBLIC] API
 	class udx_alloc
 	{
 	public:
@@ -62,23 +52,12 @@ namespace xcore
 	};
 
 	// --------------------------------------------------------------------------------------------
-	// [PUBLIC] udx registry of 'address' to 'socket'
-	class udx_registry
-	{
-	public:
-		virtual udx_address*	find(void const* data, u32 size) const = 0;
-		virtual udx_address*	add(void const* data, u32 size) = 0;
-		virtual udx_socket*		find(udx_address* key) = 0;
-		virtual void			add(udx_address* k, udx_socket* v) = 0;
-	};
-
-
-	// --------------------------------------------------------------------------------------------
 	// [PUBLIC] API
 	class udx_filter
 	{
 	public:
 		virtual void	init(u64* window, u32 size);
+
 		virtual u64		add(u64 value) = 0;
 		virtual u64		get() const = 0;
 	};

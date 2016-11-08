@@ -1,6 +1,8 @@
 #include "xbase\x_target.h"
 #include "xp2p\x_sha1.h"
 #include "xp2p\libudx\x_udx.h"
+#include "xp2p\libudx\x_udx-rtt.h"
+#include "xp2p\libudx\x_udx-ack.h"
 #include "xp2p\libudx\x_udx-seqnr.h"
 #include "xp2p\libudx\x_udx-packetqueue.h"
 
@@ -8,37 +10,6 @@
 
 namespace xcore
 {
-	
-
-	class udx_rtt_imp : public udx_rtt
-	{
-	public:
-		virtual void	on_send(u32 seq_nr, u64 time_stamp_us)
-		{
-
-		}
-
-		virtual void	on_receive(udx_ack_iterator& iter, u64 time_stamp_us)
-		{
-			
-		}
-
-		virtual s64		get_rtt_us() const
-		{
-			return m_rtt;
-		}
-
-		virtual s64		get_rto_us() const
-		{
-			return m_rto;
-		}
-
-	protected:
-		s64				m_rtt;
-		s64				m_rto;
-		
-	};
-
 	/*
 	MSS: is the maximum segment size
 
@@ -90,5 +61,30 @@ namespace xcore
 		}
 
 		RTO' := SRTT + 4 * RTTVAR
-*/
+	*/
+
+	class udx_rtt_imp : public udx_rtt
+	{
+	public:
+		virtual void	update(udx_packet* pkt)
+		{
+
+		}
+
+		virtual s64		get_rtt_us() const
+		{
+			return m_rtt;
+		}
+
+		virtual s64		get_rto_us() const
+		{
+			return m_rto;
+		}
+
+	protected:
+		s64				m_rtt;
+		s64				m_rto;
+
+	};
+
 }

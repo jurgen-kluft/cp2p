@@ -1,7 +1,10 @@
 #include "xbase\x_target.h"
+#include "xbase\x_memory_std.h"
 #include "xp2p\x_sha1.h"
 
 #include "xp2p\libudx\x_udx.h"
+#include "xp2p\libudx\x_udx-socket.h"
+#include "xp2p\libudx\x_udx-registry.h"
 
 namespace xcore
 {
@@ -11,7 +14,7 @@ namespace xcore
 	class udx_registry_imp : public udx_registry
 	{
 	public:
-		virtual void			init(udx_allocator* allocator)
+		virtual void			init(udx_alloc* allocator)
 		{
 			s32 num_buckets = 1024;
 			m_buckets = (bucket*)allocator->alloc(num_buckets * sizeof(bucket));
@@ -38,8 +41,8 @@ namespace xcore
 			data_to_hash(data, size, hash);
 
 			udx_address* a = (udx_address*)m_allocator->alloc(sizeof(udx_address));
-			memcpy(a->m_data, data, size);
-			memcpy(a->m_hash, hash, sizeof(hash));
+			x_memcpy(a->m_data, data, size);
+			x_memcpy(a->m_hash, hash, sizeof(hash));
 			a->m_index = 0;
 			return a;
 		}
@@ -86,7 +89,7 @@ namespace xcore
 		}
 
 	protected:
-		udx_allocator*			m_allocator;
+		udx_alloc*			m_allocator;
 
 		struct bucket
 		{
@@ -94,7 +97,7 @@ namespace xcore
 			u32				m_max;
 			udx_socket**	m_values;
 
-			void			init(udx_allocator* a, u32 size)
+			void			init(udx_alloc* a, u32 size)
 			{
 				m_size = 0;
 				m_max = size;
@@ -103,7 +106,7 @@ namespace xcore
 					m_values[i] = NULL;
 			}
 
-			void			add(udx_allocator* a, udx_address* k, udx_socket* v)
+			void			add(udx_alloc* a, udx_address* k, udx_socket* v)
 			{
 				for (u32 i = 0; i < m_size; i++)
 				{
@@ -114,7 +117,7 @@ namespace xcore
 				{
 					m_max = m_max * 2;
 					udx_socket** values = (udx_socket**)a->alloc(m_max * sizeof(void*));
-					memcpy(values, m_values, m_size * sizeof(void*));
+					x_memcpy(values, m_values, m_size * sizeof(void*));
 					a->dealloc(m_values);
 					m_values = values;
 				}
@@ -136,7 +139,7 @@ namespace xcore
 				for (u32 i = 0; i < m_size; i++)
 				{
 					udx_address* a = m_values[i]->get_key();
-					if (memcmp(a->m_hash, hash, sizeof(hash)) == 0)
+					if (x_memcmp(a->m_hash, hash, sizeof(hash)) == 0)
 						return m_values[i];
 				}
 				return NULL;
