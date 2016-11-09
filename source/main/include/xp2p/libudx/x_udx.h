@@ -23,20 +23,12 @@ namespace xcore
 		static u64		get_time_us();
 	};
 
-	// --------------------------------------------------------------------------------------------
-	// [PUBLIC] API
-	class udx_address
-	{
-	public:
-		u32				m_index;
-		u32				m_hash[4];
-		u32				m_data[16];
-	};
 	
 	// --------------------------------------------------------------------------------------------
 	// [PUBLIC] API
 	struct udx_message
 	{
+		inline			udx_message(void* data, u32 size) : data_ptr(data), data_size(size) {}
 		void*			data_ptr;
 		u32				data_size;
 	};

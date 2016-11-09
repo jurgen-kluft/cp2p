@@ -31,8 +31,8 @@ namespace xcore
 		virtual void			process(u64 delta_time_us);
 
 	protected:
-		udx_alloc*				m_allocator;
-		udx_alloc*				m_pkt_allocator;
+		udx_alloc*				m_sys_alloc;
+		udx_alloc*				m_msg_alloc;
 
 		xnet::udpsocket*		m_udp_socket;
 
@@ -45,5 +45,48 @@ namespace xcore
 	};
 
 
+	udx_socket_imp::udx_socket_imp(udx_alloc* allocator, udx_alloc* msg_allocator)
+		: m_sys_alloc(allocator)
+		, m_msg_alloc(msg_allocator)
+		, m_udp_socket(NULL)
+		, m_max_sockets(1024)
+		, m_all_sockets(NULL)
+		, m_num_free_sockets(0)
+		, m_free_socket_list(NULL)
+		, m_address_to_socket(NULL)
+	{
+
+	}
+	
+	udx_message		udx_socket_imp::alloc_msg(u32 size)
+	{
+		void* msg = m_msg_alloc->alloc(size);
+		return udx_message(msg, size);
+	}
+
+	void			udx_socket_imp::free_msg(udx_message& msg)
+	{
+		m_msg_alloc->dealloc(msg.data_ptr);
+		msg.data_ptr = NULL;
+		msg.data_size = 0;
+	}
+
+	udx_address*	udx_socket_imp::connect(const char* addressstr)
+	{
+		void* ipstructdata = NULL;
+		u32 ipstructsize = 0;
+		udx_address* address = m_address_to_socket->find(ipstructdata, ipstructsize);
+		if (address == NULL)
+		{
+			address = m_address_to_socket->add(ipstructdata, ipstructsize);
+		}
+		return address;
+	}
+
+	bool			udx_socket_imp::disconnect(udx_address*)
+	{
+
+		return false;
+	}
 
 }
