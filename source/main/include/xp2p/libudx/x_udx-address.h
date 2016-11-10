@@ -10,15 +10,20 @@
 
 namespace xcore
 {
-
 	// --------------------------------------------------------------------------------------------
 	// [PUBLIC] API
 	class udx_address
 	{
 	public:
-		u32				m_index;
-		u32				m_hash[4];
-		u32				m_data[16];
+		void		get(void*& addrin, u32& addrinlen);
+	};
+
+	class udx_addresses
+	{
+	public:
+		virtual udx_address*	find(const char* str_address) = 0;
+		virtual udx_address*	find(void* addrin, u32 addrinlen) = 0;
+		virtual udx_address*	add(void* addrin, u32 addrinlen) = 0;
 	};
 
 }

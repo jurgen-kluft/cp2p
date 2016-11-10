@@ -1,30 +1,27 @@
 //==============================================================================
-//  x_udx-registry.h
+//  x_udx-filter.h
 //==============================================================================
-#ifndef __XP2P_UDX_REGISTRY_H__
-#define __XP2P_UDX_REGISTRY_H__
+#ifndef __XP2P_UDX_FILTER_H__
+#define __XP2P_UDX_FILTER_H__
 #include "xbase\x_target.h"
 #ifdef USE_PRAGMA_ONCE 
 #pragma once 
 #endif
 
-#include "xbase\x_allocator.h"
 
 namespace xcore
 {
-	class udx_address;
-	class udx_socket;
-
-
-
 	// --------------------------------------------------------------------------------------------
-	// [PUBLIC] udx registry of 'address' to 'socket'
-	class udx_registry
+	// [PUBLIC] API
+	class udx_filter
 	{
 	public:
-		virtual udx_socket*		find(udx_address* key) = 0;
-		virtual void			add(udx_address* k, udx_socket* v) = 0;
+		virtual void	init(u64* window, u32 size);
+
+		virtual u64		add(u64 value) = 0;
+		virtual u64		get() const = 0;
 	};
+
 
 
 }

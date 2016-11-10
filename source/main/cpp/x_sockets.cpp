@@ -23,105 +23,50 @@ typedef void raw_type;       // Type used for raw data on this platform
 
 namespace xcore
 {
-	namespace xnet
+	namespace xsocket
 	{
 #ifdef PLATFORM_PC
-		static bool sWSAinitialized = false;
 #endif
 
-		class endpoint
+		bool	xinit::startUp()
 		{
-		public:
+			bool result = true;
 #ifdef PLATFORM_PC
-			s32				construct(const char* addr)
+			if (!m_initialized)
 			{
-				struct addrinfo hints;
-				struct addrinfo *result = NULL;
-				struct addrinfo *ptr = NULL;
+				WORD wVersionRequested;
+				WSADATA wsaData;
 
-				//--------------------------------
-				// Setup the hints address info structure which is passed to the getaddrinfo() function
-				ZeroMemory(&hints, sizeof(hints));
-				hints.ai_flags = AI_NUMERICHOST;
-				hints.ai_family = AF_UNSPEC;
-				//    hints.ai_socktype = SOCK_STREAM;
-				//    hints.ai_protocol = IPPROTO_TCP;
-
-				//--------------------------------
-				// Call getaddrinfo(). If the call succeeds, the result variable will hold a linked list
-				// of addrinfo structures containing response information
-				DWORD dwRetval = getaddrinfo(addr, NULL, &hints, &result);
-				if (dwRetval != 0) 
-				{
-					//printf("getaddrinfo failed with error: %d\n", dwRetval);
-					return -1;
+				wVersionRequested = MAKEWORD(2, 0);              // Request WinSock v2.0
+				if (WSAStartup(wVersionRequested, &wsaData) != 0)	// Load WinSock DLL
+				{	// "Unable to load WinSock DLL");
+					result = false;
+					m_initialized = false;
 				}
-
-				mProtocol = 0;
-				ZeroMemory(&mIPv6[0], sizeof(mIPv6));
-				ZeroMemory(&mIPv4[0], sizeof(mIPv4));
-
-				// Retrieve each address and print out the hex bytes
-				for (ptr = result; ptr != NULL; ptr = ptr->ai_next)
+				else
 				{
-					u8* ipaddr = NULL;
-					if (ptr->ai_family == AF_INET6)
-					{
-						ipaddr = mIPv6;	// IPv6
-					}
-					else if (ptr->ai_family == AF_INET)
-					{
-						ipaddr = mIPv4;	// IPv4
-					}
-
-					if (ipaddr != NULL)
-					{
-						if (ptr->ai_socktype == SOCK_STREAM && ptr->ai_protocol == IPPROTO_TCP)
-						{
-							write((u8 const*)ptr->ai_addr, ptr->ai_addrlen, ipaddr);
-							mProtocol = 1;
-							break;
-						}
-						else if (ptr->ai_socktype == SOCK_DGRAM && ptr->ai_protocol == IPPROTO_UDP)
-						{
-							write((u8 const*)ptr->ai_addr, ptr->ai_addrlen, ipaddr);
-							mProtocol = 2;	// UDP
-							break;
-						}
-					}
+					m_initialized = true;
 				}
-
-				freeaddrinfo(result);
 			}
-
-			bool			get_ipv4(sockaddr_in*& addr)
-			{
-				addr = (sockaddr_in*)mIPv4;
-				return false;
-			}
-
-			bool			get_ipv6(sockaddr_in6*& addr)
-			{
-				addr = (sockaddr_in6*)mIPv6;
-				return false;
-			}
-
 #endif
+			return result;
+		}
 
-
-		protected:
-			void		write(u8 const* data, u32 len, u8*& buffer)
+		bool	xinit::cleanUp()
+		{
+			bool result = true;
+#ifdef PLATFORM_PC
+			if (m_initialized)
 			{
-				for (s32 i = 0; i < len; i++)
+				if (WSACleanup() != 0)
 				{
-					*buffer++ = data[i];
+					result = false;
 				}
+#endif
+				m_initialized = false;
 			}
-
-			u32			mProtocol;
-			u8			mIPv6[32];
-			u8			mIPv4[16];
-		};
+			return result;
+		}
 
 
 		// Function to fill in address structure given an address and port
@@ -145,12 +90,12 @@ namespace xcore
 		
 		// socket_base Code
 
-		socket_base::socket_base(s32 socketDescriptor)
-			: mSocketDescriptor(socketDescriptor)
+		xudp::xudp()
+			: mSocketDescriptor(xudp::INVALID_SOCKET_DESCRIPTOR)
 		{
 		}
 
-		socket_base::~socket_base()
+		xudp::~xudp()
 		{
 #ifdef PLATFORM_PC
 			::closesocket(mSocketDescriptor);
@@ -160,34 +105,15 @@ namespace xcore
 			mSocketDescriptor = -1;
 		}
 
-		bool socket_base::valid() const
+		bool xudp::valid() const
 		{
 			return mSocketDescriptor != INVALID_SOCKET_DESCRIPTOR;
 		}
 
-		bool socket_base::open_socket(s32 type, s32 protocol)
+		bool xudp::open_socket(s32 type, s32 protocol)
 		{
 			bool result = false;
-#ifdef PLATFORM_PC
-			if (!sWSAinitialized)
-			{
-				WORD wVersionRequested;
-				WSADATA wsaData;
 
-				wVersionRequested = MAKEWORD(2, 0);              // Request WinSock v2.0
-				if (WSAStartup(wVersionRequested, &wsaData) != 0)	// Load WinSock DLL
-				{	// "Unable to load WinSock DLL");
-					result = false;
-					sWSAinitialized = false;
-				}
-				else
-				{
-					sWSAinitialized = true;
-				}
-			}
-
-			if (sWSAinitialized)
-#endif
 			{
 				if (mSocketDescriptor == INVALID_SOCKET_DESCRIPTOR)
 				{
@@ -203,7 +129,7 @@ namespace xcore
 			return result;
 		}
 
-		s32 socket_base::getLocalAddress(char* address, s32 len)
+		s32 xudp::getLocalAddress(char* address, s32 len)
 		{
 			if (!valid())
 				return -1;
@@ -223,7 +149,7 @@ namespace xcore
 			return addrStrLen;
 		}
 
-		u16 socket_base::getLocalPort()
+		u16 xudp::getLocalPort()
 		{
 			sockaddr_in addr;
 			unsigned int addr_len = sizeof(addr);
@@ -235,7 +161,7 @@ namespace xcore
 			return ntohs(addr.sin_port);
 		}
 
-		void socket_base::setLocalPort(u16 localPort)
+		void xudp::setLocalPort(u16 localPort)
 		{
 			if (valid())
 			{
@@ -253,7 +179,7 @@ namespace xcore
 			}
 		}
 
-		void socket_base::setLocalAddressAndPort(const char* localAddress, u16 localPort)
+		void xudp::setLocalAddressAndPort(const char* localAddress, u16 localPort)
 		{
 			if (valid())
 			{
@@ -268,173 +194,21 @@ namespace xcore
 			}
 		}
 
-		void socket_base::cleanUp()
-		{
-#ifdef PLATFORM_PC
-			if (WSACleanup() != 0)
-			{
-				// "WSACleanup() failed");
-			}
-#endif
-		}
-
-		u16 socket_base::resolveService(const char* service, const char* protocol)
-		{
-			struct servent *serv;        /* Structure containing service information */
-
-			if ((serv = getservbyname(service, protocol)) == NULL)
-				return atoi(service);			/* Service is port number */
-			else
-				return ntohs(serv->s_port);		/* Found port (network byte order) by name */
-		}
-
-		// socket Code
-
-		socket::socket(s32 descriptor) : socket_base(descriptor)
-		{
-
-		}
-
-		void socket::connect(const char* foreignAddress, u16 foreignPort)
-		{
-			// Get the address of the requested host
-			sockaddr_in destAddr;
-			fillAddr(foreignAddress, foreignPort, destAddr);
-
-			// Try to connect to the given port
-			if (::connect(mSocketDescriptor, (sockaddr *)&destAddr, sizeof(destAddr)) < 0)
-			{
-				// "Connect failed (connect())", true);
-			}
-		}
-
-		s32 socket::send(const void *buffer, s32 bufferLen)
-		{
-			s32 const res = ::send(mSocketDescriptor, (raw_type *)buffer, bufferLen, 0);
-			if (res < 0)
-			{
-				// Send failed (send())
-				return -1;
-			}
-			return res;
-		}
-
-		s32 socket::recv(void *buffer, s32 bufferLen)
-		{
-			s32 const rtn = ::recv(mSocketDescriptor, (raw_type *)buffer, bufferLen, 0);
-			if (rtn < 0)
-			{
-				// Received failed (recv())
-				return -1;
-			}
-			return rtn;
-		}
-
-		s32 socket::getForeignAddress(char* address, s32 len)
-		{
-			sockaddr_in addr;
-			u32 addr_len = sizeof(addr);
-			if (getpeername(mSocketDescriptor, (sockaddr *)&addr, (socklen_t *)&addr_len) < 0)
-			{
-				// Fetch of foreign address failed getpeername()
-				return -1;
-			}
-			const char* addrStr = inet_ntoa(addr.sin_addr);
-			s32 addrStrLen = StrLen(addrStr);
-			if (address != NULL)
-				strcpy_s(address, len, addrStr);
-
-			return addrStrLen;
-		}
-
-		u16 socket::getForeignPort()
-		{
-			sockaddr_in addr;
-			u32 addr_len = sizeof(addr);
-			if (getpeername(mSocketDescriptor, (sockaddr *)&addr, (socklen_t *)&addr_len) < 0)
-			{
-				// "Fetch of foreign port failed (getpeername())", true);
-				return 0;
-			}
-			return ntohs(addr.sin_port);
-		}
-
-		// tcpsocket Code
-
-		tcpsocket::tcpsocket() : socket()
-		{
-		}
-
-		void tcpsocket::open()
-		{
-			open_socket(SOCK_STREAM, IPPROTO_TCP);
-		}
-
-		void tcpsocket::connect(const char* foreignAddress, u16 foreignPort)
-		{
-			socket::connect(foreignAddress, foreignPort);
-		}
-
-		// tcpserversocket Code
-		tcpserversocket::tcpserversocket() : socket_base()
-		{
-		}
-
-		void tcpserversocket::open(u16 localPort, s32 queueLen)
-		{
-			open_socket(SOCK_STREAM, IPPROTO_TCP);
-			setLocalPort(localPort);
-			setListen(queueLen);
-		}
-
-		void tcpserversocket::open(const char* localAddress, u16 localPort, s32 queueLen)
-		{
-			open_socket(SOCK_STREAM, IPPROTO_TCP);
-			setLocalAddressAndPort(localAddress, localPort);
-			setListen(queueLen);
-		}
-
-		s32 tcpserversocket::accept(tcpsocket* newSocket)
-		{
-			s32 descriptor;
-			if ((descriptor = ::accept(mSocketDescriptor, NULL, 0)) < 0)
-			{
-				// Accept failed (accept())
-				return -1;
-			}
-			newSocket->use(descriptor);
-			return 0;
-		}
-
-		void tcpserversocket::setListen(s32 queueLen)
-		{
-			if (listen(mSocketDescriptor, queueLen) < 0)
-			{
-				// Set listening socket failed (listen())
-			}
-		}
-
-		// udpsocket Code
-
-		udpsocket::udpsocket() : socket()
-		{
-		}
-
-		void udpsocket::open(u16 localPort)
+		void xudp::open(u16 localPort)
 		{
 			open_socket(SOCK_DGRAM, IPPROTO_UDP);
 			setLocalPort(localPort);
 			setBroadcast();
 		}
 
-		void udpsocket::open(const char* localAddress, u16 localPort)
+		void xudp::open(const char* localAddress, u16 localPort)
 		{
 			open_socket(SOCK_DGRAM, IPPROTO_UDP);
 			setLocalAddressAndPort(localAddress, localPort);
 			setBroadcast();
 		}
 
-		void udpsocket::setBroadcast()
+		void xudp::setBroadcast()
 		{
 			// If this fails, we'll hear about it when we try to send.  This will allow 
 			// system that cannot broadcast to continue if they don't plan to broadcast
@@ -442,7 +216,7 @@ namespace xcore
 			setsockopt(mSocketDescriptor, SOL_SOCKET, SO_BROADCAST, (raw_type *)&broadcastPermission, sizeof(broadcastPermission));
 		}
 
-		void udpsocket::disconnect()
+		void xudp::disconnect()
 		{
 			sockaddr_in nullAddr;
 			memset(&nullAddr, 0, sizeof(nullAddr));
@@ -463,7 +237,7 @@ namespace xcore
 			}
 		}
 
-		void udpsocket::sendTo(const void *buffer, s32 bufferLen, const char* foreignAddress, u16 foreignPort)
+		void xudp::sendTo(const void *buffer, s32 bufferLen, const char* foreignAddress, u16 foreignPort)
 		{
 			sockaddr_in destAddr;
 			fillAddr(foreignAddress, foreignPort, destAddr);
@@ -475,7 +249,7 @@ namespace xcore
 			}
 		}
 
-		s32 udpsocket::recvFrom(void *buffer, s32 bufferLen, char* sourceAddress, u16 &sourcePort)
+		s32 xudp::recvFrom(void *buffer, s32 bufferLen, char* sourceAddress, u16 &sourcePort)
 		{
 			sockaddr_in clntAddr;
 			socklen_t addrLen = sizeof(clntAddr);
@@ -490,7 +264,7 @@ namespace xcore
 			return rtn;
 		}
 
-		void udpsocket::setMulticastTTL(unsigned char multicastTTL)
+		void xudp::setMulticastTTL(unsigned char multicastTTL)
 		{
 			if (setsockopt(mSocketDescriptor, IPPROTO_IP, IP_MULTICAST_TTL, (raw_type *)&multicastTTL, sizeof(multicastTTL)) < 0)
 			{
@@ -498,7 +272,7 @@ namespace xcore
 			}
 		}
 
-		void udpsocket::joinGroup(const char* multicastGroup)
+		void xudp::joinGroup(const char* multicastGroup)
 		{
 			ip_mreq multicastRequest;
 
@@ -510,7 +284,7 @@ namespace xcore
 			}
 		}
 
-		void udpsocket::leaveGroup(const char* multicastGroup)
+		void xudp::leaveGroup(const char* multicastGroup)
 		{
 			ip_mreq multicastRequest;
 

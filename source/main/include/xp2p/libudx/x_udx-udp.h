@@ -1,8 +1,8 @@
 //==============================================================================
-//  x_udx-registry.h
+//  x_udx-udp.h
 //==============================================================================
-#ifndef __XP2P_UDX_REGISTRY_H__
-#define __XP2P_UDX_REGISTRY_H__
+#ifndef __XP2P_UDX_UDP_H__
+#define __XP2P_UDX_UDP_H__
 #include "xbase\x_target.h"
 #ifdef USE_PRAGMA_ONCE 
 #pragma once 
@@ -12,20 +12,16 @@
 
 namespace xcore
 {
-	class udx_address;
-	class udx_socket;
-
-
+	struct udx_packet;
 
 	// --------------------------------------------------------------------------------------------
-	// [PUBLIC] udx registry of 'address' to 'socket'
-	class udx_registry
+	// [PRIVATE] API
+	class udp_socket
 	{
 	public:
-		virtual udx_socket*		find(udx_address* key) = 0;
-		virtual void			add(udx_address* k, udx_socket* v) = 0;
+		virtual void	send(udx_packet* pkt) = 0;
+		virtual void	recv(udx_packet*& pkt) = 0;
 	};
-
 
 }
 

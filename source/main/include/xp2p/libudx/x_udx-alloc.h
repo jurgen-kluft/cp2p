@@ -1,8 +1,8 @@
 //==============================================================================
-//  x_udx-registry.h
+//  x_udx-alloc.h
 //==============================================================================
-#ifndef __XP2P_UDX_REGISTRY_H__
-#define __XP2P_UDX_REGISTRY_H__
+#ifndef __XP2P_UDX_ALLOC_H__
+#define __XP2P_UDX_ALLOC_H__
 #include "xbase\x_target.h"
 #ifdef USE_PRAGMA_ONCE 
 #pragma once 
@@ -12,20 +12,15 @@
 
 namespace xcore
 {
-	class udx_address;
-	class udx_socket;
-
-
-
 	// --------------------------------------------------------------------------------------------
-	// [PUBLIC] udx registry of 'address' to 'socket'
-	class udx_registry
+	// [PUBLIC] API
+	class udx_alloc
 	{
 	public:
-		virtual udx_socket*		find(udx_address* key) = 0;
-		virtual void			add(udx_address* k, udx_socket* v) = 0;
+		virtual void*		alloc(u32 _size) = 0;
+		virtual void		commit(void*, u32 _size) = 0;
+		virtual void		dealloc(void*) = 0;
 	};
-
 
 }
 

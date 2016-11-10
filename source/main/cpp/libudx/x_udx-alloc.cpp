@@ -1,13 +1,14 @@
 #include "xbase\x_target.h"
 #include "xp2p\x_sha1.h"
 #include "xp2p\libudx\x_udx.h"
+#include "xp2p\libudx\x_udx-alloc.h"
 #include "xp2p\private\x_sockets.h"
 
 #include <chrono>
 
 namespace xcore
 {
-	class udx_allocator_for_messages : public udx_allocator
+	class udx_allocator_for_messages : public udx_alloc
 	{
 		struct alloc_node
 		{

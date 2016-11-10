@@ -2,16 +2,161 @@
 #include "xbase\x_string_ascii.h"
 #include "xbase\x_memory_std.h"
 
-#include "xp2p\x_sha1.h"
 #include "xp2p\libudx\x_udx.h"
-#include "xp2p\libudx\x_udx-packet.h"
+#include "xp2p\libudx\x_udx-address.h"
 #include "xp2p\libudx\x_udx-registry.h"
 #include "xp2p\libudx\x_udx-socket.h"
 
 #include "xp2p\private\x_sockets.h"
 
+#ifdef PLATFORM_PC
+#include <winsock2.h>         // For socket(), connect(), send(), and recv()
+#include <ws2tcpip.h>
+typedef int socklen_t;
+typedef char raw_type;       // Type used for raw data on this platform
+#else
+#include <sys/types.h>       // For data types
+#include <sys/socket.h>      // For socket(), connect(), send(), and recv()
+#include <netdb.h>           // For gethostbyname()
+#include <arpa/inet.h>       // For inet_addr()
+#include <unistd.h>          // For close()
+#include <netinet/in.h>      // For sockaddr_in
+#include <cstring>	       // For memset()
+#include <cstdlib>	       // For atoi()
+typedef void raw_type;       // Type used for raw data on this platform
+#endif
+
+#include <errno.h>             // For errno
+
+
 namespace xcore
 {
+
+
+	class udx_address_imp : public udx_address
+	{
+	public:
+		u32				m_index;
+		u32				m_data[16];
+		u32				m_hash[5];
+		udx_socket*		m_socket;
+	};
+
+#ifdef PLATFORM_PC
+	static inline void		write(u8 const* data, u32 len, u8* buffer)
+	{
+		for (s32 i = 0; i < len; i++)
+		{
+			*buffer++ = data[i];
+		}
+	}
+
+
+
+	s32				construct(const char* addr, udx_address_imp& address)
+	{
+		struct addrinfo hints;
+		struct addrinfo *result = NULL;
+		struct addrinfo *ptr = NULL;
+
+		//--------------------------------
+		// Setup the hints address info structure which is passed to the getaddrinfo() function
+		ZeroMemory(&hints, sizeof(hints));
+		hints.ai_flags = AI_NUMERICHOST;
+		hints.ai_family = AF_UNSPEC;
+		hints.ai_socktype = SOCK_DGRAM;
+		hints.ai_protocol = IPPROTO_UDP;
+
+		//--------------------------------
+		address.m_index = 0;
+		ZeroMemory(&address.m_hash, sizeof(address.m_hash));
+		ZeroMemory(&address.m_data[0], sizeof(address.m_data));
+
+		//--------------------------------
+		// Call getaddrinfo(). If the call succeeds, the result variable will hold a linked list
+		// of addrinfo structures containing response information
+		DWORD dwRetval = getaddrinfo(addr, NULL, &hints, &result);
+		if (dwRetval != 0)
+		{
+			//printf("getaddrinfo failed with error: %d\n", dwRetval);
+			return -1;
+		}
+
+		// Retrieve each address and print out the hex bytes
+		for (ptr = result; ptr != NULL; ptr = ptr->ai_next)
+		{
+			u8* ipaddr = (u8*)&address.m_data[0];
+			if (ipaddr != NULL)
+			{
+				if (ptr->ai_socktype == SOCK_STREAM && ptr->ai_protocol == IPPROTO_TCP)
+				{
+					write((u8 const*)ptr->ai_addr, ptr->ai_addrlen, ipaddr);
+					break;
+				}
+				else if (ptr->ai_socktype == SOCK_DGRAM && ptr->ai_protocol == IPPROTO_UDP)
+				{
+					write((u8 const*)ptr->ai_addr, ptr->ai_addrlen, ipaddr);
+					break;
+				}
+			}
+		}
+
+		construct_hash(address);
+
+		freeaddrinfo(result);
+		return 0;
+	}
+
+
+#endif
+
+	udx_address*		find_address(udx_registry* _registry, const char* str_address)
+	{
+		udx_address address;
+		if (construct(str_address, address) == 0)
+		{
+			return _registry->alloc(address);
+		}
+		return NULL;
+	}
+
+	udx_address*		find_address(udx_registry* _registry, void* addrin, u32 addrinlen)
+	{
+		udx_address address;
+		address.m_index = 0;
+		ZeroMemory(&address.m_hash, sizeof(address.m_hash));
+		write((u8*)addrin, addrinlen, (u8*)address.m_data);
+		construct_hash(address);
+		return _registry->alloc(address);
+	}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 	#define IS_DEC(ch)	( (ch) >= '0' && (ch) <= '9' )
 	#define IS_HEX(ch)	( ((ch) >= 'A' && (ch) <= 'F') || ((ch) >= 'a' && (ch) <= 'f'))
 

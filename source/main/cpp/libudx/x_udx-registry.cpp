@@ -1,13 +1,101 @@
 #include "xbase\x_target.h"
 #include "xbase\x_memory_std.h"
+
 #include "xp2p\x_sha1.h"
 
 #include "xp2p\libudx\x_udx.h"
+#include "xp2p\libudx\x_udx-alloc.h"
+#include "xp2p\libudx\x_udx-address.h"
 #include "xp2p\libudx\x_udx-socket.h"
 #include "xp2p\libudx\x_udx-registry.h"
 
 namespace xcore
 {
+	template<class KEY, class VALUE>
+	class hashtable
+	{
+		struct hashitem
+		{
+			KEY			m_key;
+			VALUE		m_value;
+			hashitem*	m_next;
+		};
+
+		u32				m_size;
+		u32				m_count;
+		hashitem**		m_table;
+		udx_alloc*		m_alloc;
+
+		void			init(udx_alloc* a, u32 size)
+		{
+			m_alloc = a;
+			m_size = size;
+			m_count = 0;
+			m_table = (hashitem**)m_alloc->alloc(size * sizeof(hashitem*));
+			for (u32 i = 0; i < size; ++i)
+				m_table[i].m_next = NULL;
+		}
+
+		void			add(KEY k, VALUE v)
+		{
+
+		}
+
+		VALUE			find(KEY k) const
+		{
+
+		}
+	};
+
+
+
+	class udx_addresses_imp : public udx_addresses
+	{
+		SHA1_CTX		m_ctx;
+
+	public:
+		inline void				hash(udx_address& address)
+		{
+			sha1_init(&m_ctx);
+			sha1_update(&m_ctx, (const u8*)address.m_data, sizeof(address.m_data));
+			sha1_final(&m_ctx, (u8*)address.m_hash.m_hash);
+		}
+
+		virtual udx_address*	add(void* data, u32 size)
+		{
+			udx_address* pa = NULL;
+			udx_socket* so = find_by_hash(a.m_hash);
+			if (so == NULL)
+			{
+				pa = (udx_address*)m_allocator->alloc(sizeof(udx_address));
+				pa->m_index = 0;
+				x_memcpy(pa->m_hash, a.m_hash, sizeof(a.m_hash));
+				x_memcpy(pa->m_data, a.m_data, sizeof(a.m_data));
+			}
+			else
+			{
+				pa = so->get_address();
+			}
+			return pa;
+		}
+
+	protected:
+
+		static inline u32		hash_to_bucket_index(u32 hash)
+		{	// Take 10 bits to be our index in the bucket array
+			return (hash & 0x3FF0) >> 4;
+		}
+
+		udx_address*		find_by_hash(u32 const hash[5]) const
+		{
+			u32 bidx = hash_to_bucket_index(hash[0]);
+			udx_address* s = m_buckets[bidx].find_by_hash(hash);
+			return s;
+		}
+
+		udx_alloc*			m_allocator;
+
+	};
 
 	// --------------------------------------------------------------------------------------------
 	// [PUBLIC] udx registry of 'address' to 'socket'
@@ -24,29 +112,6 @@ namespace xcore
 			}
 		}
 
-		virtual udx_address*	find(void const* data, u32 size) const
-		{
-			u32 hash[5];
-			data_to_hash(data, size, hash);
-			
-			udx_socket* s = find_by_hash(hash);
-			if (s == NULL)
-				return NULL;
-			return s->get_key();
-		}
-
-		virtual udx_address*	add(void const* data, u32 size) 
-		{
-			u32 hash[5];
-			data_to_hash(data, size, hash);
-
-			udx_address* a = (udx_address*)m_allocator->alloc(sizeof(udx_address));
-			x_memcpy(a->m_data, data, size);
-			x_memcpy(a->m_hash, hash, sizeof(hash));
-			a->m_index = 0;
-			return a;
-		}
-
 		virtual udx_socket*		find(udx_address* k)
 		{
 			udx_socket* s = find_by_key(k);
@@ -61,14 +126,6 @@ namespace xcore
 		}
 
 	protected:
-		static inline void		data_to_hash(void const* data, u32 size, u32* out_hash)
-		{
-			SHA1_CTX ctx;
-			sha1_init(&ctx);
-			sha1_update(&ctx, (const u8*)data, size);
-			sha1_final(&ctx, (u8*)out_hash);
-		}
-
 		static inline u32		hash_to_bucket_index(u32 hash)
 		{	// Take 10 bits to be our index in the bucket array
 			return (hash & 0x3FF0) >> 4;
@@ -81,7 +138,7 @@ namespace xcore
 			return s;
 		}
 
-		udx_socket*				find_by_hash(u32 hash[5]) const
+		udx_socket*				find_by_hash(u32 const hash[5]) const
 		{
 			u32 bidx = hash_to_bucket_index(hash[0]);
 			udx_socket* s = m_buckets[bidx].find_by_hash(hash);
@@ -91,60 +148,7 @@ namespace xcore
 	protected:
 		udx_alloc*			m_allocator;
 
-		struct bucket
-		{
-			u32				m_size;
-			u32				m_max;
-			udx_socket**	m_values;
 
-			void			init(udx_alloc* a, u32 size)
-			{
-				m_size = 0;
-				m_max = size;
-				m_values = (udx_socket**)a->alloc(size * sizeof(void*));
-				for (u32 i = 0; i < size; ++i)
-					m_values[i] = NULL;
-			}
-
-			void			add(udx_alloc* a, udx_address* k, udx_socket* v)
-			{
-				for (u32 i = 0; i < m_size; i++)
-				{
-					if (m_values[i] == v)
-						return;
-				}
-				if (m_size == m_max)
-				{
-					m_max = m_max * 2;
-					udx_socket** values = (udx_socket**)a->alloc(m_max * sizeof(void*));
-					x_memcpy(values, m_values, m_size * sizeof(void*));
-					a->dealloc(m_values);
-					m_values = values;
-				}
-				m_values[m_size++] = v;
-			}
-
-			udx_socket*		find(udx_address* k)
-			{
-				for (u32 i = 0; i < m_size; i++)
-				{
-					if (m_values[i]->get_key() == k)
-						return m_values[i];
-				}
-				return NULL;
-			}
-
-			udx_socket*		find_by_hash(u32 hash[5])
-			{
-				for (u32 i = 0; i < m_size; i++)
-				{
-					udx_address* a = m_values[i]->get_key();
-					if (x_memcmp(a->m_hash, hash, sizeof(hash)) == 0)
-						return m_values[i];
-				}
-				return NULL;
-			}
-		};
 		bucket*					m_buckets;
 	};
 

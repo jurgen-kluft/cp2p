@@ -1,31 +1,22 @@
 //==============================================================================
-//  x_udx-registry.h
+//  x_udx-time.h
 //==============================================================================
-#ifndef __XP2P_UDX_REGISTRY_H__
-#define __XP2P_UDX_REGISTRY_H__
+#ifndef __XP2P_UDX_TIME_H__
+#define __XP2P_UDX_TIME_H__
 #include "xbase\x_target.h"
 #ifdef USE_PRAGMA_ONCE 
 #pragma once 
 #endif
 
-#include "xbase\x_allocator.h"
-
 namespace xcore
 {
-	class udx_address;
-	class udx_socket;
-
-
-
 	// --------------------------------------------------------------------------------------------
-	// [PUBLIC] udx registry of 'address' to 'socket'
-	class udx_registry
+	// [PUBLIC] API
+	class udx_time
 	{
 	public:
-		virtual udx_socket*		find(udx_address* key) = 0;
-		virtual void			add(udx_address* k, udx_socket* v) = 0;
+		static u64		get_time_us();
 	};
-
 
 }
 

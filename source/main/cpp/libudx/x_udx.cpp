@@ -36,120 +36,18 @@ namespace xcore
 
 	UDX Goal:
 
-	- udx::update(packets_to_send, packets_received) to be able to send 100.000
-	  packets/s as well as receive 100.000 packets/s.
+	- udx::update(packets_to_send, packets_received) to be able to send ~100.000
+	  packets/s as well as receive ~100.000 packets/s. This amount of packets
+	  equals ~100 MiB/s.
 
 	- udx:update should be called 
 
 	*/
 
 
-	// Packet book-keeping and information header for internal use.
-	// Current size = 4 + 4 + 8 + 8 + sizeof(void*) = 32 bytes.
-	// Size should be multiple of 8
-	struct udx_packet_info
-	{
-		u32				m_ref_counter : 8;
-		u32				m_crc : 20;
-	};
-
-	struct udx_packet_hdr
-	{
-		u64				m_header[8];
-	};
 
 
-
-	// --------------------------------------------------------------------------------------------
-			
-		
-	// [PRIVATE] API
-	class udp_socket
-	{
-	public:
-		virtual void	send(udx_packet* pkt) = 0;
-		virtual void	recv(udx_packet*& pkt) = 0;
-	};
-
-
-
-
-	// --------------------------------------------------------------------------------------------
-	// [PRIVATE] IMP
-	class udx_filter_SMA : public udx_filter
-	{
-	public:
-		virtual void	init(u64* window, u32 size)
-		{
-			m_window = window;
-			m_average = 0;
-			m_count = 0;
-			m_size = size;
-		}
-
-		virtual u64		add(u64 value)
-		{
-			m_average -= m_window[m_index];
-			m_window[m_index++] = value;
-			m_average += value;
-			m_index += 1;
-			m_count += 1;
-			if (m_count > m_size)
-				m_count = m_size;
-
-			return get();
-		}
-
-		virtual u64		get() const
-		{
-			return m_average / m_count;
-		}
-
-	protected:
-		u64				m_average;
-		u64				m_index;
-		u64				m_count;
-
-		u32				m_size;
-		u64				*m_window;
-	};
-
-
-	// --------------------------------------------------------------------------------------------
-	// [PRIVATE] IMPLEMENTATION
-	class udx_socket_imp : public udx_socket
-	{
-	public:
-		udx_socket_imp(udx_alloc* allocator, udx_alloc* msg_allocator);
-
-		virtual udx_message		alloc_msg(u32 size);
-		virtual void			free_msg(udx_message& msg);
-
-		virtual udx_address*	connect(const char* address);
-		virtual bool			disconnect(udx_address*);
-
-		virtual void			send(udx_message& msg, udx_address* to);
-		virtual bool			recv(udx_message& msg, udx_address*& from);
-
-		// Process time-outs and deal with re-transmitting, disconnecting etc..
-		virtual void			process(u64 delta_time_us);
-
-	protected:
-		udx_alloc*				m_allocator;
-		udx_alloc*				m_pkt_allocator;
-
-		xnet::udpsocket*		m_udp_socket;
-
-		u32						m_max_sockets;
-		udx_socket*				m_all_sockets;
-		u32						m_num_free_sockets;
-		u32*					m_free_socket_list;
-
-		udx_registry*			m_address_to_socket;
-	};
-
-
-
+	
 	// --------------------------------------------------------------------------------------------
 	// Generic Congestion-Control Sender
 	class CC_Sender
