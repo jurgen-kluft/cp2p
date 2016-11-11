@@ -104,7 +104,7 @@ namespace xcore
 		}
 	}
 
-	void sha1_final(SHA1_CTX *ctx, u8 hash[])
+	void sha1_final(SHA1_CTX *ctx, u8 hash[20])
 	{
 		u32 i;
 

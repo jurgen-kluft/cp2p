@@ -24,7 +24,7 @@ namespace xcore
 	// API
 	void sha1_init(SHA1_CTX *ctx);
 	void sha1_update(SHA1_CTX *ctx, const u8 data[], u32 len);
-	void sha1_final(SHA1_CTX *ctx, u8 hash[]);
+	void sha1_final(SHA1_CTX *ctx, u8 hash[20]);
 }
 
 #endif	///< __XP2P_SHA1_H__

@@ -2,10 +2,13 @@
 #include "xbase\x_string_ascii.h"
 #include "xbase\x_memory_std.h"
 
+#include "xp2p\x_sha1.h"
+
 #include "xp2p\libudx\x_udx.h"
 #include "xp2p\libudx\x_udx-address.h"
 #include "xp2p\libudx\x_udx-registry.h"
 #include "xp2p\libudx\x_udx-socket.h"
+#include "xp2p\libudx\x_udx-alloc.h"
 
 #include "xp2p\private\x_sockets.h"
 
@@ -31,16 +34,114 @@ typedef void raw_type;       // Type used for raw data on this platform
 
 namespace xcore
 {
-
-
-	class udx_address_imp : public udx_address
+	class udx_haddress : public udx_address
 	{
 	public:
-		u32				m_index;
-		u32				m_data[16];
-		u32				m_hash[5];
 		udx_socket*		m_socket;
+		udx_haddress*	m_next;
+		u32				m_index;
+		u8				m_data[64];
+		u8				m_hash[20];
 	};
+
+
+	class udx_addresses_imp : public udx_addresses
+	{
+		SHA1_CTX		m_ctx;
+
+	public:
+		void					init()
+		{
+			m_count = 0;
+			m_size = 4096;
+			m_mask = (m_size - 1);
+		}
+
+		inline void				compute_hash(void* data, u32 size, u8 hash[20])
+		{
+			sha1_init(&m_ctx);
+			sha1_update(&m_ctx, (const u8*)data, size);
+			sha1_final(&m_ctx, (u8*)hash);
+		}
+
+		virtual udx_address*	add(void* data, u32 size)
+		{
+			u8 hash[20];
+			compute_hash(data, size, hash);
+			udx_haddress* h = find_by_hash(hash);
+			if (h == NULL)
+			{
+				h = (udx_haddress*)m_allocator->alloc(sizeof(udx_haddress));
+				h->m_index = 0;
+				x_memcpy(h->m_hash, hash, sizeof(hash));
+				x_memcpy(h->m_data, data, size);
+				add(h);
+			}
+			return h;
+		}
+
+		virtual udx_address*	find(void* data, u32 size)
+		{
+			u8 hash[20];
+			compute_hash(data, size, hash);
+			udx_haddress* h = find_by_hash(hash);
+			return h;
+		}
+
+		virtual udx_address*	find(const char* str_address)
+		{
+
+		}
+
+
+	protected:
+		u32					hash_to_index(u8 hash[20])
+		{
+			u32 i = (u32)(hash[8]) | (u32)(hash[9] << 8) | (u32)(hash[10] << 16) | (u32)(hash[11] << 24);
+			i = i & m_mask;
+			return i;
+		}
+
+		udx_haddress*		find_by_hash(u8 hash[20])
+		{
+			u32 const i = hash_to_index(hash);
+			udx_haddress* e = m_hashtable[i];
+			while (e != NULL)
+			{
+				if (memcmp(e->m_hash, hash, sizeof(hash)) == 0)
+					break;
+				e = e->m_next;
+			}
+			return e;
+		}
+
+		void				add(udx_haddress* h)
+		{
+			u32 const i = hash_to_index(h->m_hash);
+			udx_haddress** p = &m_hashtable[i];
+			udx_haddress* c = m_hashtable[i];
+			while (c != NULL)
+			{
+				s32 r = memcmp(c->m_hash, h->m_hash, sizeof(udx_haddress::m_hash));
+				if (r == -1)
+				{
+					break;
+				}
+				p = &c->m_next;
+				c = c->m_next;
+			}
+			*p = h;
+			h->m_next = c;
+		}
+
+		udx_alloc*			m_allocator;
+
+		u32					m_count;
+		u32					m_size;
+		u32					m_mask;
+		udx_haddress**		m_hashtable;
+	};
+
 
 #ifdef PLATFORM_PC
 	static inline void		write(u8 const* data, u32 len, u8* buffer)
@@ -51,9 +152,7 @@ namespace xcore
 		}
 	}
 
-
-
-	s32				construct(const char* addr, udx_address_imp& address)
+	s32				construct(const char* addr, udx_haddress& address)
 	{
 		struct addrinfo hints;
 		struct addrinfo *result = NULL;
@@ -101,8 +200,6 @@ namespace xcore
 			}
 		}
 
-		construct_hash(address);
-
 		freeaddrinfo(result);
 		return 0;
 	}
@@ -110,25 +207,7 @@ namespace xcore
 
 #endif
 
-	udx_address*		find_address(udx_registry* _registry, const char* str_address)
-	{
-		udx_address address;
-		if (construct(str_address, address) == 0)
-		{
-			return _registry->alloc(address);
-		}
-		return NULL;
-	}
-
-	udx_address*		find_address(udx_registry* _registry, void* addrin, u32 addrinlen)
-	{
-		udx_address address;
-		address.m_index = 0;
-		ZeroMemory(&address.m_hash, sizeof(address.m_hash));
-		write((u8*)addrin, addrinlen, (u8*)address.m_data);
-		construct_hash(address);
-		return _registry->alloc(address);
-	}
+	
 
 
 
