@@ -15,7 +15,7 @@ namespace xcore
 {
 	class udx_address;
 	class udx_socket;
-	struct udx_message;
+	struct udx_msg;
 
 	// --------------------------------------------------------------------------------------------
 	// [PUBLIC] API
@@ -36,6 +36,8 @@ namespace xcore
 		// Process time-outs and deal with re-transmitting, disconnecting etc..
 		virtual void			process(u64 delta_time_us) = 0;
 	};
+
+	udx_socket*			gCreateUdxSocket(const char* local_address);
 }
 
 #endif

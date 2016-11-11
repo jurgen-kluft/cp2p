@@ -147,19 +147,7 @@ namespace xcore
 
 	void	PoCC::process()
 	{
-		// Required:
-		// - Allocator to allocate memory for packets to receive
 
-		// Drain the UDP socket for incoming packets
-		//  - For every packet add it to the associated udx socket
-		//    If the udx socket doesn't exist create it and verify that
-		//    the packet is a SYN packet
-		// For every 'active' udx socket
-		//  - update RTT / RTO
-		//  - update CC
-		// Iterate over all 'active' udx sockets and construct ACK data
-		// Iterate over all 'active' udx sockets and send their scheduled packets
-		// Iterate over all 'active' udx sockets and collect received packets
 	}
 
 	class PoCC_Monitor_Controller
