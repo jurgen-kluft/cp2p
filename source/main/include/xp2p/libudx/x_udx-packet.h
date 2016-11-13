@@ -79,6 +79,8 @@ namespace xcore
 		udx_packet_inf const*	get_inf() const					{ return (udx_packet_inf const*)this; }
 		udx_packet_hdr const*	get_hdr() const					{ return (udx_packet_hdr const*)((u8 const*)this + sizeof(udx_packet_inf)); }
 
+		udx_address*			get_address() const				{ return udx_packet_inf* inf = get_inf(); return inf->m_remote_endpoint; }
+
 		void*					get_msg(u32& size);				// User message data block
 
 		void					a2c_hdr();						// Copy the 'accessible' packet header into the 'compact' header
