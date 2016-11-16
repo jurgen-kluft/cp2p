@@ -34,7 +34,7 @@ namespace xcore
 		virtual bool 			release_outgoing(udx_packet*&) = 0;
 	};
 
-	udx_peer*	gCreateUdxPeer(udx_address* address, , udx_alloc* allocator);
+	udx_peer*	gCreateUdxPeer(udx_address* address, udx_alloc* allocator);
 
 	// --------------------------------------------------------------------------------------------
 	// [PUBLIC] API

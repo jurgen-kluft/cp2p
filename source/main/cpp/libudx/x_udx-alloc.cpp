@@ -1,4 +1,6 @@
 #include "xbase\x_target.h"
+#include "xbase\x_allocator.h"
+
 #include "xp2p\x_sha1.h"
 #include "xp2p\libudx\x_udx.h"
 #include "xp2p\libudx\x_udx-alloc.h"
@@ -8,6 +10,33 @@
 
 namespace xcore
 {
+	class udx_alloc_sys : public udx_alloc
+	{
+		x_iallocator*	m_allocator;
+
+	public:
+		void			init()
+		{
+			m_allocator = gCreateSystemAllocator();
+		}
+
+		void*			alloc(u32 _size)
+		{
+			return m_allocator->allocate(_size, 8);
+		}
+
+		void			commit(void* _ptr, u32 _size)
+		{
+			
+		}
+
+		void			dealloc(void* _ptr)
+		{
+			return m_allocator->deallocate(_ptr);
+		}
+	};
+
+
 	class udx_allocator_for_messages : public udx_alloc
 	{
 		struct alloc_node

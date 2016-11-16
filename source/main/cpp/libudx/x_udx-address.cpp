@@ -7,7 +7,7 @@
 #include "xp2p\libudx\x_udx.h"
 #include "xp2p\libudx\x_udx-address.h"
 #include "xp2p\libudx\x_udx-registry.h"
-#include "xp2p\libudx\x_udx-socket.h"
+#include "xp2p\libudx\x_udx-peer.h"
 #include "xp2p\libudx\x_udx-alloc.h"
 
 #include "xp2p\private\x_sockets.h"
@@ -34,32 +34,38 @@ typedef void raw_type;       // Type used for raw data on this platform
 
 namespace xcore
 {
+	// --------------------------------------------------------------------------------------------
+	// [PRIVATE] API
 	class udx_haddress : public udx_address
 	{
 	public:
-		enum
-		{
-			HASH_SIZE = 20,
-		}
+		s32 				from_string(const char*);
+		virtual void		to_string(char* str, u32 maxlen) const;
 
-		udx_peer*		m_peer;
-		udx_haddress*	m_next;
-		u8				m_hash[HASH_SIZE];
+		udx_addrin const&	get_addrin() const { return m_addrin; }
+
+		void 				set_peer(udx_peer*);
+		udx_peer*			get_peer() const;
+
+		udx_haddress*		m_next;
+		udx_peer*			m_peer;
+		udx_addrin			m_addrin;
+		udx_hash			m_hash;
 	};
 
-	udx_peer*	udx_address::get_peer()
+	udx_peer*	udx_haddress::get_peer() const
 	{
-		udx_haddress* haddress = (udx_haddress*)this;
-		return haddress->m_peer;
+		return m_peer;
 	}
 
-	void		udx_address::set_peer(udx_peer* peer)
+	void		udx_haddress::set_peer(udx_peer* peer)
 	{
-		udx_haddress* haddress = (udx_haddress*)this;
-		haddress->m_peer = peer;
+		m_peer = peer;
 	}
 
-	class udx_addresses_imp : public udx_addresses
+
+
+	class udx_address_factory_imp : public udx_address_factory
 	{
 		SHA1_CTX		m_ctx;
 
@@ -71,62 +77,86 @@ namespace xcore
 			m_mask = (m_size - 1);
 		}
 
-		inline void				compute_hash(void* data, u32 size, u8 hash[udx_haddress::HASH_SIZE])
+		virtual udx_hash		compute_hash(void* addrin, u32 addrinlen)
 		{
+			udx_hash hash;
 			sha1_init(&m_ctx);
-			sha1_update(&m_ctx, (const u8*)data, size);
-			sha1_final(&m_ctx, (u8*)hash);
+			sha1_update(&m_ctx, (const u8*)addrin, addrinlen);
+			sha1_final(&m_ctx, (u8*)hash.m_hash);
 		}
 
-		virtual udx_address*	add(void* data, u32 size)
+		virtual udx_address*	create(void* addrin, u32 addrinlen)
 		{
-			u8 hash[udx_haddress::HASH_SIZE];
-			compute_hash(data, size, hash);
+			udx_hash hash = compute_hash(addrin, addrinlen);
 			udx_haddress* h = find_by_hash(hash);
 			if (h == NULL)
 			{
 				h = (udx_haddress*)m_allocator->alloc(sizeof(udx_haddress));
-				h->m_addrinlen = size;
-				x_memcpy(h->m_hash, hash, sizeof(hash));
-				x_memcpy(h->m_addrin, data, size);
+				h->m_hash = hash;
+				h->m_addrin.m_len = addrinlen;
+				x_memcpy(h->m_addrin.m_data, addrin, addrinlen);
 				add(h);
 			}
 			return h;
 		}
 
-		virtual udx_address*	add(const char* addr)
+		virtual void			destroy(udx_address* addr)
 		{
-			udx_address a;
-			a.from_string(addr);
-			void* data;
-			u32 datasize;
-			a.get_addrin(data, datasize);
-			return add(data, datasize);
+			m_allocator->dealloc(addr);
 		}
 
-		virtual udx_address*	find(void* data, u32 size)
+		virtual udx_address*	add(const char* addr)
 		{
-			u8 hash[udx_haddress::HASH_SIZE];
-			compute_hash(data, size, hash);
+			udx_haddress ha;
+			ha.from_string(addr);
+			udx_addrin const& addrin = ha.get_addrin();
+			return create((void*)addrin.m_data, addrin.m_len);
+		}
+
+		virtual udx_address*	get_assoc(void* addrin, u32 addrinlen) 
+		{
+			udx_hash hash = compute_hash(addrin, addrinlen);
 			udx_haddress* h = find_by_hash(hash);
 			return h;
 		}
 
-	protected:
-		u32					hash_to_index(u8 hash[udx_haddress::HASH_SIZE])
+		virtual	void			set_assoc(void* addrin, u32 addrinlen, udx_address* addr)
 		{
-			u32 i = (u32)(hash[8]) | (u32)(hash[9] << 8) | (u32)(hash[10] << 16) | (u32)(hash[11] << 24);
+			udx_hash hash = compute_hash(addrin, addrinlen);
+			udx_haddress* h = find_by_hash(hash);
+			if (h == NULL)
+			{
+				add(h);
+			}
+		}
+
+		virtual udx_peer*		get_assoc(udx_address* adr)
+		{
+			udx_haddress* hadr = (udx_haddress*)adr;
+			return hadr->m_peer;
+		}
+
+		virtual	void			set_assoc(udx_address* addr, udx_peer* peer)
+		{
+			udx_haddress* haddr = (udx_haddress*)addr;
+			haddr->m_peer = peer;
+		}
+
+	protected:
+		u32					hash_to_index(udx_hash const & hash)
+		{
+			u32 i = (u32)(hash.m_hash[8]) | (u32)(hash.m_hash[9] << 8) | (u32)(hash.m_hash[10] << 16) | (u32)(hash.m_hash[11] << 24);
 			i = i & m_mask;
 			return i;
 		}
 
-		udx_haddress*		find_by_hash(u8 hash[udx_haddress::HASH_SIZE])
+		udx_haddress*		find_by_hash(udx_hash const & hash)
 		{
 			u32 const i = hash_to_index(hash);
 			udx_haddress* e = m_hashtable[i];
 			while (e != NULL)
 			{
-				if (memcmp(e->m_hash, hash, sizeof(hash)) == 0)
+				if (e->m_hash.m_len == hash.m_len && memcmp(e->m_hash.m_hash, hash.m_hash, sizeof(hash)) == 0)
 					break;
 				e = e->m_next;
 			}
@@ -137,19 +167,19 @@ namespace xcore
 		{
 			u32 const i = hash_to_index(h->m_hash);
 			udx_haddress** p = &m_hashtable[i];
-			udx_haddress* c = m_hashtable[i];
-			while (c != NULL)
+			udx_haddress* e = m_hashtable[i];
+			while (e != NULL)
 			{
-				s32 r = memcmp(c->m_hash, h->m_hash, sizeof(udx_haddress::m_hash));
+				s32 r = memcmp(e->m_hash.m_hash, h->m_hash.m_hash, sizeof(udx_haddress::m_hash));
 				if (r == -1)
 				{
 					break;
 				}
-				p = &c->m_next;
-				c = c->m_next;
+				p = &e->m_next;
+				e = e->m_next;
 			}
 			*p = h;
-			h->m_next = c;
+			h->m_next = e;
 		}
 
 		udx_alloc*			m_allocator;
@@ -161,8 +191,10 @@ namespace xcore
 	};
 
 
+
 #ifdef PLATFORM_PC
-	s32		udx_address::from_string(const char* addr)
+
+	s32		udx_haddress::from_string(const char* addr)
 	{
 		struct addrinfo hints;
 		struct addrinfo *result = NULL;
@@ -177,8 +209,8 @@ namespace xcore
 		hints.ai_protocol = IPPROTO_UDP;
 
 		//--------------------------------
-		m_addrinlen = 0;
-		ZeroMemory(m_addrin, sizeof(m_addrin));
+		m_addrin.m_len = 0;
+		ZeroMemory(m_addrin.m_data, sizeof(m_addrin.m_data));
 
 		//--------------------------------
 		// Call getaddrinfo(). If the call succeeds, the result variable will hold a linked list
@@ -195,10 +227,11 @@ namespace xcore
 		{
 			if (ptr->ai_socktype == SOCK_DGRAM && ptr->ai_protocol == IPPROTO_UDP)
 			{
-				m_addrinlen = ptr->ai_addrlen;
+				m_addrin.m_len = ptr->ai_addrlen;
+				u8 const* ai_addr = (u8 const*)ptr->ai_addr;
 				for (s32 i = 0; i < ptr->ai_addrlen; i++)
 				{
-					m_addrin[i] = ptr->ai_addr[i];
+					m_addrin.m_data[i] = ai_addr[i];
 				}
 				break;
 			}

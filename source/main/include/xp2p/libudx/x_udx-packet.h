@@ -20,7 +20,7 @@ namespace xcore
 
 	// The current layout of an allocated packet in memory is as follows:
 	//
-	// [  INF(32)  ][ QUEUE-NODE  ][  HDR(64)  ][  COMPACT HDR(64)  ][  BODY  ]
+	// [  INF(32)  ][  HDR(64)  ][  COMPACT HDR(64)  ][  BODY  ]
 
 	// 32 bytes
 	struct udx_packet_inf
@@ -38,20 +38,6 @@ namespace xcore
 		u64						m_timestamp_send_us;
 		u64						m_timestamp_rcvd_us;			// (rcv - send) - rcvdelay = RTT
 		udx_address*			m_remote_endpoint;
-	};
-
-	struct udx_interval
-	{
-		udx_seqnr				m_interval[2];
-		u32						m_refcount;
-	};
-
-	struct udx_packet_qnode
-	{
-		udx_interval*			m_interval;
-
-		udx_packet*				get_pkt()						{ return (udx_packet*)((u8*)this - sizeof(udx_packet_inf)); }
-		udx_packet const*		get_pkt() const					{ return (udx_packet const*)((u8 const*)this - sizeof(udx_packet_inf)); }
 	};
 
 	// 64 bytes
@@ -79,7 +65,7 @@ namespace xcore
 		udx_packet_inf const*	get_inf() const					{ return (udx_packet_inf const*)this; }
 		udx_packet_hdr const*	get_hdr() const					{ return (udx_packet_hdr const*)((u8 const*)this + sizeof(udx_packet_inf)); }
 
-		udx_address*			get_address() const				{ return udx_packet_inf* inf = get_inf(); return inf->m_remote_endpoint; }
+		udx_address*			get_address() const				{ udx_packet_inf const* inf = get_inf(); return inf->m_remote_endpoint; }
 
 		void*					get_msg(u32& size);				// User message data block
 

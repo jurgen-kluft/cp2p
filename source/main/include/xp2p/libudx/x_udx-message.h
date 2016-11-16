@@ -24,12 +24,9 @@ namespace xcore
 	public:
 		inline				udx_msg_reader(udx_msg const& _msg) : m_msg(_msg) { }
 
-		bool				has_block() const;
-
 		void				set_cursor(u32);
 		u32					get_cursor() const;
 
-		u32					get_flags() const;
 		u32					get_size() const;
 
 		bool				can_read(u32 number_of_bytes) const;		// check if we still can read n number of bytes
