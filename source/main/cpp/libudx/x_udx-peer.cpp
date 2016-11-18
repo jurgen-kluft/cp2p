@@ -47,6 +47,8 @@ namespace xcore
 	public:
 		udx_socket_host(udx_alloc* _allocator, udx_alloc* _msg_allocator);
 
+		void					initialize();
+
 		virtual udx_address*	get_address() const;
 
 		virtual udx_msg			alloc_msg(u32 size);
@@ -68,8 +70,11 @@ namespace xcore
 
 		udx_address*			m_address;
 
+		udx_iaddrin2address*	m_addrin_to_address;
+		udx_iaddress2peer*		m_address_to_peer;
+		udx_address_factory*	m_address_factory;
+
 		udx_factory*			m_factory;
-		udx_addresses*			m_addresses;
 		udp_socket*				m_udp_socket;
 
 		u32						m_max_peers;
@@ -81,15 +86,25 @@ namespace xcore
 	udx_socket_host::udx_socket_host(udx_alloc* allocator, udx_alloc* msg_allocator)
 		: m_sys_alloc(allocator)
 		, m_msg_alloc(msg_allocator)
-		, m_address(NULL)
+		, m_addrin_to_address(NULL)
+		, m_address_to_peer(NULL)
+		, m_address_factory(NULL)
 		, m_factory(NULL)
-		, m_addresses(NULL)
 		, m_udp_socket(NULL)
 		, m_max_peers(1024)
 		, m_num_peers(0)
 		, m_all_peers(NULL)
 	{
 
+	}
+
+	void			udx_socket_host::initialize()
+	{
+		void* factory_mem = m_sys_alloc->alloc(sizeof(udx_address_factory));
+		udx_address_factory* factory = new (factory_mem) udx_address_factory();
+		m_address_factory = factory;
+		m_addrin_to_address = m_address_factory;
+		m_address_to_peer = m_address_factory;
 	}
 
 	udx_address*	udx_socket_host::get_address() const
@@ -112,25 +127,31 @@ namespace xcore
 
 	udx_address*	udx_socket_host::connect(const char* addressstr)
 	{
-		udx_address* address = m_addresses->add(addressstr);
-		udx_peer* peer = address->get_peer();
-		if (peer == NULL)
+		udx_address* address = NULL;
+		udx_addrin addrin;
+		if (addrin.from_string(addressstr) == 0)
 		{
-			peer = m_factory->create_peer(address);
-			address->set_peer(peer);
-		}
-		if (peer->is_connected() == false)
-		{
-			peer->connect();
+			address = m_address_factory->create(addrin.m_data, addrin.m_len);
+
+			udx_peer* peer = m_address_to_peer->get_assoc(address);
+			if (peer == NULL)
+			{
+				peer = m_factory->create_peer(address);
+				m_address_to_peer->set_assoc(address, peer);
+			}
+			if (peer->is_connected() == false)
+			{
+				peer->connect();
+			}
 		}
 		return address;
 	}
 
 	bool			udx_socket_host::disconnect(udx_address* address)
 	{
-		if (address->get_peer() != NULL)
+		udx_peer* peer = m_address_to_peer->get_assoc(address);
+		if (peer != NULL)
 		{
-			udx_peer* peer = address->get_peer();
 			if (peer->is_connected())
 			{
 				peer->disconnect();
@@ -142,9 +163,9 @@ namespace xcore
 
 	bool			udx_socket_host::is_connected(udx_address* address) const
 	{
-		if (address->get_peer() != NULL)
+		udx_peer* peer = m_address_to_peer->get_assoc(address);
+		if (peer != NULL)
 		{
-			udx_peer* peer = address->get_peer();
 			return (peer->is_connected());
 		}
 		return false;
@@ -161,8 +182,9 @@ namespace xcore
 		//  - For every packet add it to the associated udx socket
 		//    If the udx socket doesn't exist create it and verify that
 		//    the packet is a SYN packet
+		udx_addrin addrin;
 		udx_packet* packet = NULL;
-		while (_udpsocket->recv(packet, m_allocator, m_addresses))
+		while (m_udp_socket->recv(packet, addrin, m_allocator))
 		{
 			udx_address* address = packet->get_address();
 			udx_peer* peer = address->get_peer();

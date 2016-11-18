@@ -194,7 +194,7 @@ namespace xcore
 
 #ifdef PLATFORM_PC
 
-	s32		udx_haddress::from_string(const char* addr)
+	s32		udx_addrin::from_string(const char* addr)
 	{
 		struct addrinfo hints;
 		struct addrinfo *result = NULL;
@@ -209,8 +209,8 @@ namespace xcore
 		hints.ai_protocol = IPPROTO_UDP;
 
 		//--------------------------------
-		m_addrin.m_len = 0;
-		ZeroMemory(m_addrin.m_data, sizeof(m_addrin.m_data));
+		m_len = 0;
+		ZeroMemory(m_data, sizeof(m_data));
 
 		//--------------------------------
 		// Call getaddrinfo(). If the call succeeds, the result variable will hold a linked list
@@ -227,11 +227,11 @@ namespace xcore
 		{
 			if (ptr->ai_socktype == SOCK_DGRAM && ptr->ai_protocol == IPPROTO_UDP)
 			{
-				m_addrin.m_len = ptr->ai_addrlen;
+				m_len = ptr->ai_addrlen;
 				u8 const* ai_addr = (u8 const*)ptr->ai_addr;
 				for (s32 i = 0; i < ptr->ai_addrlen; i++)
 				{
-					m_addrin.m_data[i] = ai_addr[i];
+					m_data[i] = ai_addr[i];
 				}
 				break;
 			}
@@ -242,7 +242,7 @@ namespace xcore
 	}
 
 #else
-	s32		udx_address::from_string(const char* addr)
+	s32		udx_addrin::from_string(const char* addr)
 	{
 		return -1;
 	}

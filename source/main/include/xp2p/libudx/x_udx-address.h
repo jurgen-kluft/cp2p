@@ -28,14 +28,14 @@ namespace xcore
 	class udx_iaddrin2address
 	{
 	public:
-		virtual	udx_address*	get_assoc(void* addrin, u32 addrinlen) const = 0;
+		virtual	udx_address*	get_assoc(void* addrin, u32 addrinlen) = 0;
 		virtual	void			set_assoc(void* addrin, u32 addrinlen, udx_address* addr) = 0;
 	};
 
 	class udx_iaddress2peer
 	{
 	public:
-		virtual	udx_peer*		get_assoc(udx_address* address) const = 0;
+		virtual	udx_peer*		get_assoc(udx_address* address) = 0;
 		virtual	void			set_assoc(udx_address* address, udx_peer* peer) = 0;
 	};
 
@@ -43,6 +43,8 @@ namespace xcore
 	{
 		u32		m_len;
 		u8		m_data[64];
+
+		s32		from_string(const char*);
 	};
 
 	struct udx_hash
@@ -70,6 +72,11 @@ namespace xcore
 
 		virtual	udx_peer*		get_assoc(udx_address* address);
 		virtual	void			set_assoc(udx_address* address, udx_peer* peer);
+
+		void*					operator new(xcore::xsize_t num_bytes, void* mem) { return mem; }
+		void					operator delete(void* mem, void*) { }
+		void*					operator new(xcore::xsize_t num_bytes) { return NULL; }
+		void					operator delete(void* mem) { }
 
 	private:
 		virtual udx_hash		compute_hash(void* addrin, u32 addrinlen);

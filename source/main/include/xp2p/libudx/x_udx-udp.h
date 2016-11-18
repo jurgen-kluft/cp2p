@@ -12,17 +12,15 @@
 
 namespace xcore
 {
-	class udx_alloc;
-	class udx_addresses;
-	struct udx_packet;
+	struct udx_addrin;
 
 	// --------------------------------------------------------------------------------------------
 	// [PRIVATE] API
 	class udp_socket
 	{
 	public:
-		virtual bool	send(udx_packet* pkt, udx_addresses* addresses) = 0;
-		virtual bool	recv(udx_packet*& pkt, udx_alloc* packet_allocator, udx_addresses* addresses) = 0;
+		virtual bool	send(void* pkt, u32 pkt_size, udx_addrin const& addrin) = 0;
+		virtual bool	recv(void* pkt, u32& pkt_size, udx_addrin& addrin) = 0;
 	};
 
 }
