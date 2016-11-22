@@ -28,15 +28,17 @@ namespace xcore
 	class udx_iaddrin2address
 	{
 	public:
-		virtual	udx_address*	get_assoc(void* addrin, u32 addrinlen) = 0;
+		virtual	bool			get_assoc(void* addrin, u32 addrinlen, udx_address*& assoc) = 0;
 		virtual	void			set_assoc(void* addrin, u32 addrinlen, udx_address* addr) = 0;
+		virtual	void			del_assoc(void* addrin, u32 addrinlen) = 0;
 	};
 
-	class udx_iaddress2peer
+	class udx_iaddress2idx
 	{
 	public:
-		virtual	udx_peer*		get_assoc(udx_address* address) = 0;
-		virtual	void			set_assoc(udx_address* address, udx_peer* peer) = 0;
+		virtual	bool			get_assoc(udx_address* address, u32& assoc) = 0;
+		virtual	void			set_assoc(udx_address* address, u32 idx) = 0;
+		virtual	void			del_assoc(udx_address* address) = 0;
 	};
 
 	struct udx_addrin
@@ -61,17 +63,19 @@ namespace xcore
 
 	// --------------------------------------------------------------------------------------------
 	// [PUBLIC] API
-	class udx_address_factory : public udx_iaddrin2address, public udx_iaddress2peer, public udx_ihashing
+	class udx_address_factory : public udx_iaddrin2address, public udx_iaddress2idx, public udx_ihashing
 	{
 	public:
 		virtual udx_address*	create(void* addrin, u32 addrinlen);
 		virtual void			destroy(udx_address*);
 
-		virtual	udx_address*	get_assoc(void* addrin, u32 addrinlen);
+		virtual	bool			get_assoc(void* addrin, u32 addrinlen, udx_address*& assoc);
 		virtual	void			set_assoc(void* addrin, u32 addrinlen, udx_address* addr);
+		virtual	void			del_assoc(void* addrin, u32 addrinlen);
 
-		virtual	udx_peer*		get_assoc(udx_address* address);
-		virtual	void			set_assoc(udx_address* address, udx_peer* peer);
+		virtual	bool			get_assoc(udx_address* address, u32& assoc);
+		virtual	void			set_assoc(udx_address* address, u32 idx);
+		virtual	void			del_assoc(udx_address* address);
 
 		void*					operator new(xcore::xsize_t num_bytes, void* mem) { return mem; }
 		void					operator delete(void* mem, void*) { }

@@ -70,7 +70,10 @@ namespace xcore
 		void*					get_msg(u32& size);				// User message data block
 
 		void					a2c_hdr();						// Copy the 'accessible' packet header into the 'compact' header
-		void const*				get_pkt(u32& size) const;		// Pointer and size of the packet to transfer
+		void*					to_msg(u32& size) const;		// Pointer and size of the packet to transfer or received
+
+		static udx_packet*		from_msg(udx_msg& msg);
+		static udx_packet*		from_udp_packet(void* udp_pkt_data, u32 udp_pkt_size, udx_address* address);
 	};
 }
 

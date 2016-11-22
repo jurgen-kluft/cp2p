@@ -16,6 +16,12 @@ namespace xcore
 	class udx_address;
 	struct udx_msg;
 
+	class udx_msg_handler
+	{
+	public:
+		virtual void			handle_msg(udx_msg& msg) = 0;
+	};
+
 	// --------------------------------------------------------------------------------------------
 	// [PUBLIC] API
 	class udx_peer
@@ -32,6 +38,8 @@ namespace xcore
 
 		virtual bool			release_incoming(udx_packet*&) = 0;
 		virtual bool 			release_outgoing(udx_packet*&) = 0;
+
+		virtual void			process(u64 delta_time_us) = 0;
 	};
 
 	udx_peer*	gCreateUdxPeer(udx_address* address, udx_alloc* allocator);

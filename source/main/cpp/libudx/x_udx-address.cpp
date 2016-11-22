@@ -44,26 +44,12 @@ namespace xcore
 
 		udx_addrin const&	get_addrin() const { return m_addrin; }
 
-		void 				set_peer(udx_peer*);
-		udx_peer*			get_peer() const;
-
 		udx_haddress*		m_next;
-		udx_peer*			m_peer;
+		u32					m_index;
 		udx_addrin			m_addrin;
 		udx_hash			m_hash;
 	};
-
-	udx_peer*	udx_haddress::get_peer() const
-	{
-		return m_peer;
-	}
-
-	void		udx_haddress::set_peer(udx_peer* peer)
-	{
-		m_peer = peer;
-	}
-
-
+	
 
 	class udx_address_factory_imp : public udx_address_factory
 	{
@@ -89,7 +75,7 @@ namespace xcore
 		{
 			udx_hash hash = compute_hash(addrin, addrinlen);
 			udx_haddress* h = find_by_hash(hash);
-			if (h == NULL)
+			if (h == nullptr)
 			{
 				h = (udx_haddress*)m_allocator->alloc(sizeof(udx_haddress));
 				h->m_hash = hash;
@@ -104,42 +90,51 @@ namespace xcore
 		{
 			m_allocator->dealloc(addr);
 		}
-
-		virtual udx_address*	add(const char* addr)
-		{
-			udx_haddress ha;
-			ha.from_string(addr);
-			udx_addrin const& addrin = ha.get_addrin();
-			return create((void*)addrin.m_data, addrin.m_len);
-		}
-
-		virtual udx_address*	get_assoc(void* addrin, u32 addrinlen) 
+		
+		virtual bool			get_assoc(void* addrin, u32 addrinlen, udx_address*& assoc)
 		{
 			udx_hash hash = compute_hash(addrin, addrinlen);
-			udx_haddress* h = find_by_hash(hash);
-			return h;
+			assoc = find_by_hash(hash);
+			return assoc!=nullptr;
 		}
 
 		virtual	void			set_assoc(void* addrin, u32 addrinlen, udx_address* addr)
 		{
 			udx_hash hash = compute_hash(addrin, addrinlen);
 			udx_haddress* h = find_by_hash(hash);
-			if (h == NULL)
+			if (h == nullptr)
 			{
 				add(h);
 			}
 		}
 
-		virtual udx_peer*		get_assoc(udx_address* adr)
+		virtual	void			del_assoc(void* addrin, u32 addrinlen)
 		{
-			udx_haddress* hadr = (udx_haddress*)adr;
-			return hadr->m_peer;
+			udx_hash hash = compute_hash(addrin, addrinlen);
+			udx_haddress* h = find_by_hash(hash);
+			if (h != nullptr)
+			{
+				remove(h);
+				destroy(h);
+			}
 		}
 
-		virtual	void			set_assoc(udx_address* addr, udx_peer* peer)
+		virtual bool			get_assoc(udx_address* adr, u32& assoc)
+		{
+			udx_haddress* hadr = (udx_haddress*)adr;
+			assoc = hadr->m_index;
+			return true;
+		}
+
+		virtual	void			set_assoc(udx_address* addr, u32 idx)
 		{
 			udx_haddress* haddr = (udx_haddress*)addr;
-			haddr->m_peer = peer;
+			haddr->m_index = idx;
+		}
+
+		virtual void			del_assoc(udx_address* adr)
+		{
+
 		}
 
 	protected:
@@ -154,7 +149,7 @@ namespace xcore
 		{
 			u32 const i = hash_to_index(hash);
 			udx_haddress* e = m_hashtable[i];
-			while (e != NULL)
+			while (e != nullptr)
 			{
 				if (e->m_hash.m_len == hash.m_len && memcmp(e->m_hash.m_hash, hash.m_hash, sizeof(hash)) == 0)
 					break;
@@ -168,7 +163,7 @@ namespace xcore
 			u32 const i = hash_to_index(h->m_hash);
 			udx_haddress** p = &m_hashtable[i];
 			udx_haddress* e = m_hashtable[i];
-			while (e != NULL)
+			while (e != nullptr)
 			{
 				s32 r = memcmp(e->m_hash.m_hash, h->m_hash.m_hash, sizeof(udx_haddress::m_hash));
 				if (r == -1)
@@ -180,6 +175,26 @@ namespace xcore
 			}
 			*p = h;
 			h->m_next = e;
+		}
+
+		void				remove(udx_haddress* h)
+		{
+			u32 const i = hash_to_index(h->m_hash);
+			udx_haddress** p = &m_hashtable[i];
+			udx_haddress* e = m_hashtable[i];
+			while (e != nullptr)
+			{
+				s32 r = memcmp(e->m_hash.m_hash, h->m_hash.m_hash, sizeof(udx_haddress::m_hash));
+				if (r == 0)
+				{
+					*p = e->m_next;
+					e = e->m_next;
+					break;
+				}
+				p = &e->m_next;
+				e = e->m_next;
+			}
+			h->m_next = nullptr;
 		}
 
 		udx_alloc*			m_allocator;
