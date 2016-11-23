@@ -13,11 +13,10 @@ namespace xcore
 {
 	class udx_peer;
 
-	class udx_factory
+	class udx_peer_factory
 	{
 	public:
 		virtual udx_peer*		create_peer(udx_address*) = 0;
-		virtual udx_address*	create_address(void* data, u32 size) = 0;
 	};
 
 }

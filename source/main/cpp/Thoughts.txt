@@ -5,11 +5,10 @@ P2P NODE
 - Event loop (no threading)
 - Peer object based connection, identified using endpoint
 
-UTP
-- Packet allocation is done through an allocator that actually allocates a message_block* so
-  that when it is given back to the layer above, this way we don't require to memcpy the
-  packets.
-
+UDX
+- Packet allocation is done through an allocator that actually allocates a udx_packet so
+  that when it is given back to the layer above as a user message we don't need to extra
+  allocate any info, book-keeping and header data for this message.
 
 PoCC (Performance Oriented Congestion Control)
 

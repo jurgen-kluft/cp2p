@@ -116,7 +116,7 @@ namespace xcore
 		udx_iaddress2idx*		m_address_to_index;
 		udx_address_factory*	m_address_factory;
 
-		udx_factory*			m_factory;
+		udx_peer_factory*		m_peer_factory;
 		udp_socket*				m_udp_socket;
 
 		u32						m_max_peers;
@@ -151,7 +151,7 @@ namespace xcore
 		, m_addrin_to_address(nullptr)
 		, m_address_to_index(nullptr)
 		, m_address_factory(nullptr)
-		, m_factory(nullptr)
+		, m_peer_factory(nullptr)
 		, m_udp_socket(nullptr)
 		, m_max_peers(1024)
 		, m_all_peers(nullptr)
@@ -203,23 +203,26 @@ namespace xcore
 			}
 
 			udx_peer* peer = nullptr;
+			
 			u32 peer_idx;
 			if (m_address_to_index->get_assoc(address, peer_idx))
 			{
-				// This means that there is no peer yet, we need to create it
-			
+				peer = m_all_peers[peer_idx];
 			}
 			
 			if (peer == nullptr)
 			{
-				peer = m_factory->create_peer(address);
+				peer = m_peer_factory->create_peer(address);
+				m_all_peers[peer_idx] = peer;
 				m_address_to_index->set_assoc(address, peer_idx);
 			}
+
 			if (peer->is_connected() == false)
 			{
+				m_active_peers[peer_idx] = peer;
+				m_num_active_peers += 1;
 				peer->connect();
 			}
-			
 		}
 		return address;
 	}
@@ -283,13 +286,13 @@ namespace xcore
 		return false;
 	}
 
-	enum eptype
+	enum epacket_type
 	{
 		INCOMING = 0,
 		OUTGOING = 1
 	};
 
-	static void collect_packets(eptype ptype, udx_peer** peers, u32 max_peers, udx_packet_list& list)
+	static void collect_packets(epacket_type ptype, udx_peer** peers, u32 max_peers, udx_packet_list& list)
 	{
 		u32 index = 0;
 		do
@@ -377,7 +380,7 @@ namespace xcore
 			peer = m_all_peers[peer_idx];
 			if (peer == nullptr)
 			{	// Create the peer
-				peer = m_factory->create_peer(address);
+				peer = m_peer_factory->create_peer(address);
 				m_all_peers[peer_idx] = peer;
 				m_active_peers[peer_idx] = peer;
 				m_num_active_peers += 1;

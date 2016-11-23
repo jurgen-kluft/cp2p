@@ -20,7 +20,16 @@ namespace xcore
 
 	// The current layout of an allocated packet in memory is as follows:
 	//
-	// [  INF(32)  ][  HDR(64)  ][  COMPACT HDR(64)  ][  BODY  ]
+	// [  INF(32)  ][  HDR(64)  ][  BODY  ]
+	// 
+	// A packet might not use all of the ACK bytes in the header, to solve this
+	// without too much problems we do the following:
+	// N number of tail bytes from the message body will be written to the tail
+	// of the header and this in turn will shorten the udp message size.
+	// The good thing is that the position of the message body in the udp packet
+	// is always "u8* udp_packet + sizeof(udx_packet_hdr)", the only thing we
+	// need to do after receiving the udp packet is to fix the tail of the body.
+
 
 	// 32 bytes
 	struct udx_packet_inf
@@ -67,8 +76,6 @@ namespace xcore
 		udx_packet_hdr const*	get_hdr() const					{ return (udx_packet_hdr const*)((u8 const*)this + sizeof(udx_packet_inf)); }
 
 		udx_address*			get_address() const				{ udx_packet_inf const* inf = get_inf(); return inf->m_remote_endpoint; }
-
-		void					a2c_hdr();						// Copy the 'accessible' packet header into the 'compact' header
 
 		void*					to_user(u32& size) const;		// Pointer and size of the user msg transfered or received
 		void*					to_udp(u32& size) const;		// Pointer and size of the udp msg transfered or received
