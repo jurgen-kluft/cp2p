@@ -38,6 +38,7 @@ namespace xcore
 		u64						m_timestamp_send_us;
 		u64						m_timestamp_rcvd_us;			// (rcv - send) - rcvdelay = RTT
 		udx_address*			m_remote_endpoint;
+		udx_packet*				m_next;
 	};
 
 	// 64 bytes
@@ -67,13 +68,13 @@ namespace xcore
 
 		udx_address*			get_address() const				{ udx_packet_inf const* inf = get_inf(); return inf->m_remote_endpoint; }
 
-		void*					get_msg(u32& size);				// User message data block
-
 		void					a2c_hdr();						// Copy the 'accessible' packet header into the 'compact' header
-		void*					to_msg(u32& size) const;		// Pointer and size of the packet to transfer or received
 
-		static udx_packet*		from_msg(udx_msg& msg);
-		static udx_packet*		from_udp_packet(void* udp_pkt_data, u32 udp_pkt_size, udx_address* address);
+		void*					to_user(u32& size) const;		// Pointer and size of the user msg transfered or received
+		void*					to_udp(u32& size) const;		// Pointer and size of the udp msg transfered or received
+
+		static udx_packet*		from_user(void* user, u32 size);
+		static udx_packet*		from_udp(void* udp, u32 size, udx_address* address);
 	};
 }
 

@@ -21,7 +21,7 @@ namespace xcore
 	}
 
 	// Pointer and size of the packet to transfer
-	void const*	udx_packet::get_pkt(u32& size) const
+	void*	udx_packet::to_udp(u32& size) const
 	{
 		// Figure out the size of the header, this is dynamic since the ACK data is not
 		// constant size
@@ -34,7 +34,7 @@ namespace xcore
 		u32 const offset_hdr = max_ack_bytes - real_ack_bytes;
 		u32 const sizeof_com = sizeof_hdr - offset_hdr;
 
-		u8 const* compacthdr = (u8 const*)((u8 const*)this + sizeof(udx_packet_inf) + sizeof(udx_packet_hdr) + offset_hdr);
+		u8* compacthdr = (u8*)((u8*)this + sizeof(udx_packet_inf) + sizeof(udx_packet_hdr) + offset_hdr);
 
 		udx_packet_inf const* inf = get_inf();
 		size = inf->m_body_in_bytes + sizeof_com;

@@ -39,17 +39,33 @@ namespace xcore
 	class udx_haddress : public udx_address
 	{
 	public:
-		s32 				from_string(const char*);
-		virtual void		to_string(char* str, u32 maxlen) const;
+		virtual bool 				from_string(const char*);
+		virtual s32					to_string(char* str, u32 maxstrlen) const;
+		virtual udx_addrin const&	get_addrin() const;
 
-		udx_addrin const&	get_addrin() const { return m_addrin; }
-
-		udx_haddress*		m_next;
-		u32					m_index;
-		udx_addrin			m_addrin;
-		udx_hash			m_hash;
+		udx_haddress*				m_next;
+		u32							m_index;
+		udx_addrin					m_addrin;
+		udx_hash					m_hash;
 	};
 	
+	bool	udx_haddress::from_string(const char* str)
+	{
+		s32 result = m_addrin.from_string(str);
+		return result == 0;
+	}
+
+	s32		udx_haddress::to_string(char* str, u32 maxstrlen) const
+	{
+		// @TODO
+		return 0;
+	}
+
+	udx_addrin const&	udx_haddress::get_addrin() const
+	{
+		return m_addrin;
+	}
+
 
 	class udx_address_factory_imp : public udx_address_factory
 	{
@@ -204,8 +220,6 @@ namespace xcore
 		u32					m_mask;
 		udx_haddress**		m_hashtable;
 	};
-
-
 
 #ifdef PLATFORM_PC
 

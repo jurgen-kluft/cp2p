@@ -10,12 +10,30 @@
 
 namespace xcore
 {
+	struct udx_addrin
+	{
+		u32		m_len;
+		u8		m_data[64];
+
+		s32		from_string(const char* str);
+		s32		to_string(const char* str, u32 maxstrlen);
+	};
+
+	struct udx_hash
+	{
+		u32		m_len;
+		u8		m_hash[32];
+	};
+
+
 	// --------------------------------------------------------------------------------------------
 	// [PUBLIC] API
 	class udx_address
 	{
 	public:
-		virtual void			to_string(char* str, u32 maxlen) const = 0;
+		virtual bool				from_string(char* str) const = 0;
+		virtual s32					to_string(char* str, u32 maxstrlen) const = 0;
+		virtual udx_addrin const&	get_addrin() const = 0;
 	};
 
 	class udx_iaddress_factory
@@ -39,20 +57,6 @@ namespace xcore
 		virtual	bool			get_assoc(udx_address* address, u32& assoc) = 0;
 		virtual	void			set_assoc(udx_address* address, u32 idx) = 0;
 		virtual	void			del_assoc(udx_address* address) = 0;
-	};
-
-	struct udx_addrin
-	{
-		u32		m_len;
-		u8		m_data[64];
-
-		s32		from_string(const char*);
-	};
-
-	struct udx_hash
-	{
-		u32		m_len;
-		u8		m_hash[32];
 	};
 
 	class udx_ihashing

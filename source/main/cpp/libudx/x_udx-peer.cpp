@@ -8,11 +8,52 @@
 #include "xp2p\libudx\x_udx-registry.h"
 #include "xp2p\libudx\x_udx-peer.h"
 #include "xp2p\libudx\x_udx-udp.h"
+#include "xp2p\libudx\x_udx-time.h"
 
 #include "xp2p\private\x_sockets.h"
 
 namespace xcore
 {
+	struct udx_packet_list
+	{
+		u32				m_size;
+		udx_packet*		m_head;
+		udx_packet*		m_tail;
+
+		inline			udx_packet_list() : m_size(0), m_head(nullptr), m_tail(nullptr) {}
+
+		bool			is_empty() const { return m_size == 0; }
+
+		void			push(udx_packet* packet)
+		{
+			if (m_head == nullptr)
+			{
+				m_head = packet;
+				m_tail = packet;
+			}
+			else
+			{
+				udx_packet_inf* packet_info = m_tail->get_inf();
+				packet_info->m_next = packet;
+				m_tail = packet;
+			}
+			m_size += 1;
+		}
+
+		bool			pop(udx_packet*& packet)
+		{
+			if (is_empty())
+				return false;
+
+			packet = m_head;
+
+			udx_packet_inf* packet_info = m_head->get_inf();
+			m_head = packet_info->m_next;
+			m_size -= 1;
+			return true;
+		}
+	};
+
 	// --------------------------------------------------------------------------------------------
 	// [PRIVATE] IMPLEMENTATION OF HOST
 	class udx_socket_peer : public udx_peer
@@ -57,7 +98,7 @@ namespace xcore
 		virtual bool			disconnect(udx_address*);
 		virtual bool			is_connected(udx_address*) const;
 
-		virtual void			send(udx_msg& msg, udx_address* to);
+		virtual bool			send(udx_msg& msg, udx_address* to);
 		virtual bool			recv(udx_msg& msg, udx_address*& from);
 
 		// Process time-outs and deal with re-transmitting, disconnecting etc..
@@ -83,8 +124,8 @@ namespace xcore
 		u32						m_num_active_peers;
 		udx_peer**				m_active_peers;
 
-		u32						m_send_peer_index;
-		u32						m_recv_peer_index;
+		udx_packet_list			m_recv_packets_list;
+		udx_packet_list			m_send_packets_list;
 
 		u32						m_num_free_peers;
 		u32*					m_free_peers;
@@ -129,10 +170,6 @@ namespace xcore
 		m_address_factory = factory;
 		m_addrin_to_address = m_address_factory;
 		m_address_to_index = m_address_factory;
-
-		m_send_peer_index = 0;
-		m_recv_peer_index = 0;
-
 	}
 
 	udx_address*	udx_socket_host::get_address() const
@@ -219,7 +256,7 @@ namespace xcore
 		return false;
 	}
 
-	void	udx_socket_host::send(udx_msg& msg, udx_address* to)
+	bool	udx_socket_host::send(udx_msg& msg, udx_address* to)
 	{
 		u32 peer_index;
 		if (m_address_to_index->get_assoc(to, peer_index))
@@ -227,50 +264,66 @@ namespace xcore
 			udx_peer* peer = m_active_peers[peer_index];
 			if (peer != nullptr)
 			{
-				udx_packet* packet = udx_packet::from_msg(msg);
+				udx_packet* packet = udx_packet::from_user(msg.data_ptr, msg.data_size);
 				peer->handle_outgoing(packet);
+				return true;
 			}
 		}
+		return false;
 	}
 
 	bool	udx_socket_host::recv(udx_msg& msg, udx_address*& from)
 	{
-		if (m_num_active_peers == 0)
-			return false;
+		udx_packet* packet;
+		if (m_recv_packets_list.pop(packet))
+		{
+			msg.data_ptr = packet->to_user(msg.data_size);
+			return true;
+		}
+		return false;
+	}
 
-		u32 index = m_send_peer_index;
+	enum eptype
+	{
+		INCOMING = 0,
+		OUTGOING = 1
+	};
+
+	static void collect_packets(eptype ptype, udx_peer** peers, u32 max_peers, udx_packet_list& list)
+	{
+		u32 index = 0;
 		do
 		{
-			udx_peer* peer = m_active_peers[index];
+			udx_peer* peer = peers[index];
 			if (peer != nullptr)
 			{
+				bool has_packet;
 				udx_packet* packet;
-				if (peer->release_incoming(packet))
+				switch (ptype)
 				{
-					m_send_peer_index = index;
+					case INCOMING: peer->release_incoming(packet); break;
+					case OUTGOING: peer->release_incoming(packet); break;
+				}
 
-					u32 msg_size;
-					void* msg_body = packet->to_msg(msg_size);
-					msg.data_ptr = msg_body;
-					msg.data_size = msg_size;
-					return true;
+				if (has_packet)
+				{
+					udx_packet_inf* packet_info = packet->get_inf();
+					list.push(packet);
 				}
 				else
 				{
-					index = (index + 1) % m_max_peers;
+					index = (index + 1) % max_peers;
 				}
 			}
 			else
 			{
-				while (peer == nullptr && index != m_send_peer_index)
+				do
 				{
-					index = (index + 1) % m_max_peers;
-					peer = m_active_peers[index];
-				}
+					index = (index + 1) % max_peers;
+					peer = peers[index];
+				} while (peer == nullptr && index != 0);
 			}
-		} while (index != m_send_peer_index);
-
-		return false;
+		} while (index != 0);
 	}
 
 	void	udx_socket_host::process(u64 delta_time_us)
@@ -298,6 +351,8 @@ namespace xcore
 		
 		while (m_udp_socket->recv(udp_pkt_data, udp_pkt_size, addrin))
 		{
+			u64 const udp_pkt_rcvd_time = udx_time::get_time_us();
+			
 			m_msg_alloc->commit(udp_pkt_data, udp_pkt_size);
 
 			udx_address* address = nullptr;
@@ -328,7 +383,9 @@ namespace xcore
 				m_num_active_peers += 1;
 			}
 
-			udx_packet* packet = udx_packet::from_udp_packet(udp_pkt_data, udp_pkt_size, address);
+			udx_packet* packet = udx_packet::from_udp(udp_pkt_data, udp_pkt_size, address);
+			udx_packet_inf* packet_info = packet->get_inf();
+			packet_info->m_timestamp_rcvd_us = udp_pkt_rcvd_time;
 			peer->handle_incoming(packet);
 
 			udp_pkt_data = nullptr;
@@ -342,6 +399,7 @@ namespace xcore
 		// For every 'active' udx socket
 		//  - update RTT / RTO
 		//  - update CC
+		//  - construct ACK data ?
 		for (u32 i = 0; i < m_num_active_peers; ++i)
 		{
 			udx_peer* peer = m_active_peers[i];
@@ -351,10 +409,27 @@ namespace xcore
 			}
 		}
 
-		// Iterate over all 'active' udx sockets and construct ACK data
 		// Iterate over all 'active' udx sockets and send their scheduled packets
-		// Iterate over all 'active' udx sockets and collect received packets
+		collect_packets(OUTGOING, m_active_peers, m_max_peers, m_send_packets_list);
 
+		udx_packet* packet_to_send;
+		while (m_send_packets_list.pop(packet_to_send))
+		{
+			udx_packet_inf* packet_info = packet_to_send->get_inf();
+			udx_addrin const & addrin = packet_info->m_remote_endpoint->get_addrin();
+
+			u32 udp_packet_size;
+			void* udp_packet_data = packet_to_send->to_udp(udp_packet_size);
+			packet_info->m_timestamp_send_us = udx_time::get_time_us();
+			if (!m_udp_socket->send(udp_packet_data, udp_packet_size, addrin))
+			{
+				break;
+			}
+		}
+		
+		// Iterate over all 'active' udx sockets and collect received packets
+		// Build a singly linked list of all incoming packets (in-order!)
+		collect_packets(INCOMING, m_active_peers, m_max_peers, m_recv_packets_list);
 
 
 	}

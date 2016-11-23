@@ -58,7 +58,7 @@ namespace xcore
 		virtual bool			disconnect(udx_address*) = 0;
 		virtual bool 			is_connected(udx_address*) const = 0;
 
-		virtual void			send(udx_msg& msg, udx_address* to) = 0;
+		virtual bool			send(udx_msg& msg, udx_address* to) = 0;
 		virtual bool			recv(udx_msg& msg, udx_address*& from) = 0;
 
 		virtual void			process(u64 delta_time_us) = 0;
