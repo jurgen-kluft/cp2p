@@ -9,6 +9,7 @@
 #endif
 
 #include "xp2p\libudx\x_udx.h"
+#include "xp2p\libudx\x_udx-alloc.h"
 #include "xp2p\libudx\x_udx-seqnr.h"
 #include "xp2p\libudx\x_udx-bitstream.h"
 
@@ -86,7 +87,7 @@ namespace xcore
 			u32				m_qsize;
 			ITEM*			m_items;
 			udx_alloc*		m_allocator;
-			u32*			m_marksdata;
+			u8*				m_marksdata;
 			udx_bitstream	m_marks;
 
 			void			reset()
@@ -96,8 +97,8 @@ namespace xcore
 				m_qcount = 0;
 				m_qsize = 4096;
 				m_items = (ITEM*)m_allocator->alloc(sizeof(ITEM) * m_qsize);
-				m_marksdata = (u32*)m_allocator->alloc(m_qsize / (sizeof(u32) * 8));
-				m_marks.set_stream(m_marksdata, m_qsize / (sizeof(u32) * 8));
+				m_marksdata = (u8*)m_allocator->alloc(m_qsize / 8);
+				m_marks.set_stream(m_marksdata, m_qsize / 8);
 			}
 
 			ITEM			get(udx_seqnr seq_nr)

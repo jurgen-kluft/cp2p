@@ -66,6 +66,8 @@ namespace xcore
 		u32						m_hdr_xxx2 : 8;					// Unused
 
 		u32						m_hdr_acks[13];					// ACK bit stream (13 * 4 * 8 = max 416 bits)
+
+		udx_packet*				get_packet() const				{ return (udx_packet*)((u8*)this - sizeof(udx_packet_inf)); }
 	};
 
 	struct udx_packet

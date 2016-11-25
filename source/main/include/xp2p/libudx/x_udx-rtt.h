@@ -26,6 +26,7 @@ namespace xcore
 		virtual s64 get_rto_us() const = 0;
 	};
 
+	udx_rtt*	gCreateDefaultRTT(udx_alloc* _allocator);
 }
 
 #endif

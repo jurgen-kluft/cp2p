@@ -10,6 +10,7 @@
 
 #include "xp2p\libudx\x_udx-packet.h"
 #include "xp2p\libudx\x_udx-packetqueue.h"
+#include "xp2p\libudx\x_udx-bitstream.h"
 
 namespace xcore
 {
@@ -26,7 +27,7 @@ namespace xcore
 	class udx_ack_builder
 	{
 	public:
-		void	build(udx_packet* p, udx_packetqueue* rcvd_packets)
+		void	build(udx_packet* p, udx_packetqueue* q)
 		{
 			udx_seqnr ackseqnr;
 		}
