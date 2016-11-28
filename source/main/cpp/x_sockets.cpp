@@ -243,7 +243,7 @@ namespace xcore
 			fillAddr(foreignAddress, foreignPort, destAddr);
 
 			// Write out the whole buffer as a single message.
-			if (sendto(mSocketDescriptor, (raw_type *)buffer, bufferLen, 0, (sockaddr *)&destAddr, sizeof(destAddr)) != bufferLen)
+			if (::sendto(mSocketDescriptor, (raw_type *)buffer, bufferLen, 0, (sockaddr *)&destAddr, sizeof(destAddr)) != bufferLen)
 			{
 				// "Send failed (sendto())", true);
 			}

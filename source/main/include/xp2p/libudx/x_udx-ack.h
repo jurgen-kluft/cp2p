@@ -21,7 +21,7 @@ namespace xcore
 	class udx_ack_iterator
 	{
 	public:
-		virtual bool		pop(u32& seq_nr) = 0;
+		virtual bool		pop(udx_seqnr& seq_nr, bool& acked) = 0;
 	};
 
 	class udx_ack_builder

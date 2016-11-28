@@ -36,7 +36,7 @@ namespace xcore
 	{
 		u32						m_flags : 8;
 		u32						m_size_in_bytes : 12;			// Full size [packet_inf + packet_hdr + packet_hdr + body]
-		u32						m_body_in_bytes : 12;			// Actual body size that needs to be send
+		u32						m_body_in_bytes : 12;			// Actual body size for sending/receiving
 
 		u32						m_transmissions : 7;
 		u32						m_need_resend : 1;
@@ -65,7 +65,7 @@ namespace xcore
 		u32						m_hdr_ack_seqnr : 24;			// ACK sequence number
 		u32						m_hdr_xxx2 : 8;					// Unused
 
-		u32						m_hdr_acks[13];					// ACK bit stream (13 * 4 * 8 = max 416 bits)
+		u8						m_hdr_acks[52];					// ACK bit stream (52 * 8 = max 416 bits)
 
 		udx_packet*				get_packet() const				{ return (udx_packet*)((u8*)this - sizeof(udx_packet_inf)); }
 	};

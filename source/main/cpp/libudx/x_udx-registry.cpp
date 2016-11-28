@@ -4,7 +4,6 @@
 #include "xp2p\libudx\x_udx.h"
 #include "xp2p\libudx\x_udx-alloc.h"
 #include "xp2p\libudx\x_udx-address.h"
-#include "xp2p\libudx\x_udx-socket.h"
 #include "xp2p\libudx\x_udx-registry.h"
 
 namespace xcore

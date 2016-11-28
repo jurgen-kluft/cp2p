@@ -11,69 +11,33 @@
 namespace xcore
 {
 	/*
-	MSS: is the maximum segment size
+	RTT - Round Trip Time
 
-	TCP: ACK - SACK
+	For UDX with PCC we are only interested in an average RTT and derived RTO.
+	Since RTT is not used to modify 'cwnd' (since we only have rate) it is not
+	necessary to measure at a high frequency.
 
-		When sending ACK data to acknowledge the receipt of packets to the sender we advance the receive queue to the
-		point where there is a gap in the seqnr, we then send ack_seqnr = seqnr-1.
-
-		An ACK packet should be send every time we drain the UDP socket of data (recv)
-
-	RTT: Smooth RTT, using 'moving' average computation
-
-	TCP: given a new RTT measurement `RTT'
-	http://www.erg.abdn.ac.uk/users/gerrit/dccp/notes/ccid2/rto_estimator/
-
-		RTT : = max(RTT, 1)		// 1 jiffy sampling granularity
-
-		if (this is the first RTT measurement)
-		{
-			SRTT: = RTT
-			mdev : = RTT / 2
-			mdev_max : = max(RTT / 2, 200msec / 4)
-			RTTVAR : = mdev_max
-			rtt_seq : = SND.NXT
-		}
-		else
-		{
-			SRTT'	 := SRTT + 1/8 * (RTT - SRTT)
-
-				if (RTT < SRTT - mdev)
-					mdev'	:= 31/32 * mdev + 1/32 * |RTT - SRTT|
-				else
-					mdev'	:= 3/4   * mdev + 1/4  * |RTT - SRTT|
-
-				if (mdev' > mdev_max)
-				{
-					mdev_max : = mdev'
-					if (mdev_max > RTTVAR)
-						RTTVAR' := mdev_max
-				}
-
-				if (SND.UNA is `after' rtt_seq)
-				{
-					if (mdev_max < RTTVAR)
-						RTTVAR' := 3/4 * RTTVAR + 1/4 * mdev_max
-					rtt_seq  : = SND.NXT
-					mdev_max : = 200msec / 4
-				}
-		}
-
-		RTO' := SRTT + 4 * RTTVAR
+	Note: This is an exponential moving average accumulator. Add samples to it 
+	      and it keeps track of a moving mean value and an average deviation.
 	*/
 
-	class udx_rtt_imp : public udx_rtt
+	class udx_rtt_pcc : public udx_rtt
 	{
 	public:
-		virtual void	update(udx_packet* pkt)
+		udx_rtt_pcc()
+			: m_inverted_gain(10)
+			, m_num_samples(0)
+			, m_mean(0)
+			, m_average_deviation(0)
 		{
 
 		}
+
+		virtual void	update(udx_packet* pkt);
 
 		virtual s64		get_rtt_us() const
 		{
-			return m_rtt;
+			return ;
 		}
 
 		virtual s64		get_rto_us() const
@@ -82,9 +46,50 @@ namespace xcore
 		}
 
 	protected:
-		s64				m_rtt;
-		s64				m_rto;
+		s64			m_inverted_gain;
+		s64			m_num_samples;
+		s64			m_mean;
+		s64			m_average_deviation;
 
+		s64			mean() const
+		{
+			s64 rtt_1sec = (1000 * 1000);
+			return m_num_samples > 0 ? (m_mean + 32) / 64 : rtt_1sec;
+		}
+
+		s64			avg_deviation() const
+		{
+			return m_num_samples > 1 ? (m_average_deviation + 32) / 64 : 0;
+		}
+
+		s64			m_rtt;
+		s64			m_rto;
 	};
+
+	void	udx_rtt_pcc::update(udx_packet* pkt)
+	{
+		udx_packet_inf* pkt_inf = pkt->get_inf();
+		udx_packet_hdr* pkt_hdr = pkt->get_hdr();
+
+		s64 rtt_sample = (pkt_inf->m_timestamp_rcvd_us - pkt_inf->m_timestamp_send_us) - pkt_hdr->m_hdr_ack_delay_us;
+		rtt_sample *= 64;
+
+		s64 deviation = 0;
+		if (m_num_samples > 0)
+		{
+			deviation = abs(m_mean - rtt_sample);
+			if (m_num_samples > 1)
+			{
+				m_average_deviation += (deviation - m_average_deviation) / m_num_samples;
+			}
+		}
+
+		if (m_num_samples < m_inverted_gain)
+		{
+			++m_num_samples;
+		}
+
+		m_mean += (rtt_sample - m_mean) / m_num_samples;
+	}
 
 }
