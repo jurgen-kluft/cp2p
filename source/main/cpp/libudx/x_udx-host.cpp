@@ -49,8 +49,48 @@ namespace xcore
 
 			udx_packet_inf* packet_info = m_head->get_inf();
 			m_head = packet_info->m_next;
+			packet_info->m_next = nullptr;
 			m_size -= 1;
+
 			return true;
+		}
+	};
+
+	struct udx_indices
+	{
+		u32*		m_indices;
+		u32			m_size;
+		u32			m_max;
+
+		inline		udx_indices()
+			: m_indices(nullptr)
+			, m_size(0)
+			, m_max(0)
+		{
+
+		}
+
+		void		init(udx_alloc* _allocator, u32 size)
+		{
+			m_indices = (u32*)_allocator->alloc(size * sizeof(u32));
+			m_size = size;
+			m_max = size;
+		}
+
+		bool		pop(u32& index)
+		{
+			if (m_size > 0)
+			{
+				m_size -= 1;
+				index = m_indices[m_size];
+				return true;
+			}
+			return false;
+		}
+
+		void		push(u32 index)
+		{
+			m_indices[m_size++] = index;
 		}
 	};
 
@@ -91,7 +131,9 @@ namespace xcore
 		udx_address_factory*	m_address_factory;
 
 		udx_peer_factory*		m_peer_factory;
-		udp_socket*				m_udp_socket;
+		
+		udp_socket*				m_udp_socket2;
+		udx_socket*				m_udx_socket;
 
 		u32						m_max_peers;
 		udx_peer**				m_all_peers;
@@ -101,21 +143,7 @@ namespace xcore
 		udx_packet_list			m_recv_packets_list;
 		udx_packet_list			m_send_packets_list;
 
-		u32						m_num_free_peers;
-		u32*					m_free_peers;
-		u32						get_free_peer_index()
-		{
-			if (m_num_free_peers > 0)
-			{
-				m_num_free_peers -= 1;
-				return m_free_peers[m_num_free_peers];
-			}
-			return -1;
-		}
-		void					add_free_peer_index(u32 peer_index)
-		{
-			m_free_peers[m_num_free_peers++] = peer_index;
-		}
+		udx_indices				m_free_peer_indices;
 	};
 
 
@@ -126,13 +154,12 @@ namespace xcore
 		, m_address_to_index(nullptr)
 		, m_address_factory(nullptr)
 		, m_peer_factory(nullptr)
-		, m_udp_socket(nullptr)
+		, m_udp_socket2(nullptr)
+		, m_udx_socket(nullptr)
 		, m_max_peers(1024)
 		, m_all_peers(nullptr)
 		, m_num_active_peers(0)
 		, m_active_peers(nullptr)
-		, m_num_free_peers(0)
-		, m_free_peers(nullptr)
 	{
 
 	}
@@ -144,6 +171,11 @@ namespace xcore
 		m_address_factory = factory;
 		m_addrin_to_address = m_address_factory;
 		m_address_to_index = m_address_factory;
+
+		m_udp_socket2 = gCreateUdpSocket(m_sys_alloc);
+		m_udx_socket = gCreateUdxSocket(m_sys_alloc, m_udp_socket2, m_address_factory, m_addrin_to_address);
+
+		m_free_peer_indices.init(m_sys_alloc, 4096);
 	}
 
 	udx_address*	udx_socket_host::get_address() const
@@ -322,23 +354,15 @@ namespace xcore
 		//   in issues related to 'maximum peers'
 
 		udx_addrin addrin;
-
-		u32 udp_pkt_size = m_MTU;
-		void* udp_pkt_data = m_msg_alloc->alloc(m_MTU);
-		
-		while (m_udp_socket->recv(udp_pkt_data, udp_pkt_size, addrin))
+		udx_packet* packet = (udx_packet*)m_msg_alloc->alloc(m_MTU);
+		while (m_udx_socket->recv(packet))
 		{
-			u64 const udp_pkt_rcvd_time = udx_time::get_time_us();
-			
-			m_msg_alloc->commit(udp_pkt_data, udp_pkt_size);
+			udx_packet_inf* packet_inf = packet->get_inf();
+			udx_packet_hdr* packet_hdr = packet->get_hdr();
 
-			udx_address* address = nullptr;
-			m_addrin_to_address->get_assoc(addrin.m_data, addrin.m_len, address);
-			if (address == nullptr)
-			{
-				address = m_address_factory->create(addrin.m_data, addrin.m_len);
-				m_addrin_to_address->set_assoc(addrin.m_data, addrin.m_len, address);
-			}
+			m_msg_alloc->commit(packet, packet_inf->m_size_in_bytes);
+
+			udx_address* address = packet_inf->m_remote_endpoint;
 
 			udx_peer* peer = nullptr;
 			u32 peer_idx;
@@ -347,7 +371,7 @@ namespace xcore
 				// This association doesn't exist, so get a new free peer index
 				// and initialize this association between the address and the
 				// peer index.
-				peer_idx = get_free_peer_index();
+				m_free_peer_indices.pop(peer_idx);
 				m_address_to_index->set_assoc(address, peer_idx);
 			}
 

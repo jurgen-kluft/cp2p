@@ -3,6 +3,16 @@
 
 namespace xcore
 {
+	void		udx_packet_inf::encode()
+	{
+
+	}
+
+	void		udx_packet_inf::decode()
+	{
+
+	}
+
 	// User message data block
 	void*		udx_packet::to_user(u32& size) const
 	{

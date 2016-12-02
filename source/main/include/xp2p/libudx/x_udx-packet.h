@@ -48,6 +48,9 @@ namespace xcore
 		u64						m_timestamp_rcvd_us;			// (rcv - send) - rcvdelay = RTT
 		udx_address*			m_remote_endpoint;
 		udx_packet*				m_next;
+
+		void					encode();
+		void					decode();
 	};
 
 	// 64 bytes

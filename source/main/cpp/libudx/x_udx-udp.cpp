@@ -81,6 +81,9 @@ namespace xcore
 		{
 			udx_packet_inf* inf = pkt->get_inf();
 			udx_packet_hdr* hdr = pkt->get_hdr();
+			
+			// Before sending encode the packet
+			inf->encode();
 
 			m_udp_socket->send((void*)hdr, inf->m_body_in_bytes + sizeof(udx_packet_hdr), inf->m_remote_endpoint->get_addrin());
 			inf->m_timestamp_send_us = udx_time::get_time_us();
@@ -99,6 +102,7 @@ namespace xcore
 			if (m_udp_socket->recv((void*)hdr, pkt_size, addrin))
 			{
 				inf->m_timestamp_rcvd_us = udx_time::get_time_us();
+				inf->m_body_in_bytes = pkt_size - sizeof(udx_packet_hdr);
 
 				udx_address* remote_endpoint;
 				if (!m_addrin_2_address->get_assoc(addrin.m_data, addrin.m_len, remote_endpoint))
@@ -108,6 +112,7 @@ namespace xcore
 				}
 
 				inf->m_remote_endpoint = remote_endpoint;
+				inf->decode();	//< Decode the packet
 				return true;
 			}
 			return false;

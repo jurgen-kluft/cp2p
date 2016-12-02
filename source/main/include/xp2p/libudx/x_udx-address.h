@@ -67,7 +67,7 @@ namespace xcore
 
 	// --------------------------------------------------------------------------------------------
 	// [PUBLIC] API
-	class udx_address_factory : public udx_iaddrin2address, public udx_iaddress2idx, public udx_ihashing
+	class udx_address_factory : public udx_iaddress_factory, public udx_iaddrin2address, public udx_iaddress2idx, public udx_ihashing
 	{
 	public:
 		virtual udx_address*	create(void* addrin, u32 addrinlen);
