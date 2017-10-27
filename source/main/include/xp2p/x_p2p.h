@@ -32,10 +32,10 @@ namespace xcore
 		class node
 		{
 		public:
-			virtual peer*		start(netip* endpoint, allocator* _allocator, message_allocator* _message_allocator) = 0;
+			virtual peer*		start(netip endpoint, allocator* _allocator, message_allocator* _message_allocator) = 0;
 			virtual void		stop() = 0;
 
-			virtual peer*		register_peer(netip* endpoint) = 0;
+			virtual peer*		register_peer(netip endpoint) = 0;
 			virtual void		unregister_peer(peer*) = 0;
 
 			virtual void		connect_to(peer* peer) = 0;

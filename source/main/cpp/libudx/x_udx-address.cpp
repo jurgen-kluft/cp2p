@@ -258,7 +258,7 @@ namespace xcore
 			{
 				m_len = ptr->ai_addrlen;
 				u8 const* ai_addr = (u8 const*)ptr->ai_addr;
-				for (s32 i = 0; i < ptr->ai_addrlen; i++)
+				for (s32 i = 0; i < m_len; i++)
 				{
 					m_data[i] = ai_addr[i];
 				}
@@ -270,11 +270,23 @@ namespace xcore
 		return 0;
 	}
 
+	s32		udx_addrin::to_string(char* str, u32 maxstrlen) const
+	{
+		// @TODO: NOT IMPLEMENTED !
+		return -1;
+	}
+
 #else
 	s32		udx_addrin::from_string(const char* addr)
 	{
 		return -1;
 	}
+
+	s32		udx_addrin::to_string(char* str, u32 maxstrlen) const
+	{
+		return -1;
+	}
+
 #endif
 
 }

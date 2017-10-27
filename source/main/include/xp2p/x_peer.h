@@ -26,7 +26,7 @@ namespace xcore
 
 			virtual bool			is_remote() const = 0;
 			virtual estatus			get_status() const = 0;
-			virtual netip const*	get_ip() const = 0;
+			virtual netip			get_ip() const = 0;
 
 		protected:
 			virtual					~peer() {}

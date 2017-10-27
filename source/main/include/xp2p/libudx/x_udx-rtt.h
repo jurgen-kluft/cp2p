@@ -8,6 +8,7 @@
 #pragma once 
 #endif
 
+#include "xp2p\libudx\x_udx-alloc.h"
 #include "xp2p\libudx\x_udx-packet.h"
 #include "xp2p\libudx\x_udx-packetqueue.h"
 

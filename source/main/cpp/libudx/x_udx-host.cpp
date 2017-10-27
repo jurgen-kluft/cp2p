@@ -383,10 +383,8 @@ namespace xcore
 				m_active_peers[peer_idx] = peer;
 				m_num_active_peers += 1;
 			}
-
-			udx_packet* packet = udx_packet::from_udp(udp_pkt_data, udp_pkt_size, address);
-			udx_packet_inf* packet_info = packet->get_inf();
-			packet_info->m_timestamp_rcvd_us = udp_pkt_rcvd_time;
+			
+			packet_inf->m_timestamp_rcvd_us = udx_time::get_time_us();;
 			peer->push_incoming(packet);
 
 			if (m_active_peers[peer_idx] == nullptr)
@@ -395,13 +393,8 @@ namespace xcore
 				m_active_peers[peer_idx] = peer;
 			}
 
-			udp_pkt_data = nullptr;
-			udp_pkt_size = 0;
+			m_msg_alloc->dealloc(packet);
 		}
-
-		m_msg_alloc->dealloc(udp_pkt_data);
-
-		u64 delta_time = 0;
 
 		// For every 'active' udx socket
 		//  - update RTT / RTO
@@ -412,7 +405,7 @@ namespace xcore
 			udx_peer* peer = m_active_peers[i];
 			if (peer != nullptr)
 			{
-				peer->process(delta_time);
+				peer->process(delta_time_us);
 			}
 		}
 
@@ -428,7 +421,7 @@ namespace xcore
 			u32 udp_packet_size;
 			void* udp_packet_data = packet_to_send->to_udp(udp_packet_size);
 			packet_info->m_timestamp_send_us = udx_time::get_time_us();
-			if (!m_udp_socket->send(udp_packet_data, udp_packet_size, addrin))
+			if (!m_udp_socket2->send(udp_packet_data, udp_packet_size, addrin))
 			{
 				break;
 			}

@@ -6,10 +6,10 @@
 using namespace xcore;
 extern x_iallocator* gTestAllocator;
 
-class test_message_allocator : public xcore::xp2p::imessage_allocator
+class test_message_allocator : public xcore::xp2p::message_allocator
 {
 public:
-	virtual xp2p::message*		allocate(xp2p::ipeer* _from, xp2p::ipeer* _to, u32 _flags)
+	virtual xp2p::message*		allocate(xp2p::peer* _from, xp2p::peer* _to, u32 _flags)
 	{
 		void* mem = gTestAllocator->allocate(sizeof(xp2p::message), sizeof(void*));
 		xp2p::message* msg = new (mem) xp2p::message(_from, _to, _flags);
@@ -57,11 +57,14 @@ UNITTEST_SUITE_BEGIN(msg)
 
 		UNITTEST_TEST(reader)
 		{
-			xp2p::ipeer* from = NULL;
-			xp2p::ipeer* to = NULL;
+			xp2p::peer* from = NULL;
+			xp2p::peer* to = NULL;
+
 			xp2p::message * m1 = message_allocator->allocate(from, to, 128);
+			
 			xp2p::message_block * b1 = message_allocator->allocate(0, 128);
-			m1->add_block(b1);
+			m1->set_block(b1);
+
 			xp2p::message_writer writer = m1->get_writer();
 			xp2p::message_reader reader = m1->get_reader();
 

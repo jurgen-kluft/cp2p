@@ -33,17 +33,17 @@ namespace xcore
 			// peer interface
 			virtual bool		is_remote() const { return is_remote_; }
 			virtual estatus		get_status() const { return status_; }
-			virtual netip const* get_ip() const { return &endpoint_; }
+			virtual netip 		get_ip() const { return endpoint_; }
 
 			inline bool			is_not_connected() const { estatus s = get_status(); return s == 0 || s >= DISCONNECT; }
 			inline void			set_status(estatus s) { status_ = s; }
 
 			enum epeer { LOCAL_PEER, REMOTE_PEER };
-			void				init(epeer _peer, estatus _status, netip* _ip)
+			void				init(epeer _peer, estatus _status, netip _ip)
 			{
 				is_remote_ = _peer == REMOTE_PEER;
 				status_ = _status;
-				endpoint_ = *_ip;
+				endpoint_ = _ip;
 			}
 
 			XCORE_CLASS_PLACEMENT_NEW_DELETE
@@ -75,10 +75,10 @@ namespace xcore
 			// node interface
 			// ============================================================================================
 
-			peer*				start(netip* endpoint, allocator* _allocator, message_allocator* _message_allocator);
+			peer*				start(netip endpoint, allocator* _allocator, message_allocator* _message_allocator);
 			void				stop();
 
-			peer*				register_peer(netip* endpoint);
+			peer*				register_peer(netip endpoint);
 			void				unregister_peer(peer*);
 
 			void				connect_to(peer* peer);
@@ -131,7 +131,7 @@ namespace xcore
 			allocator*			allocator_;
 			message_allocator*	message_allocator_;
 
-			xnet::udpsocket		udp_socket_;
+			xsocket::xudp		udp_socket_;
 			utp_context*		utp_context_;
 
 			lqueue<xpeer>*		inactive_peers_;
@@ -158,12 +158,12 @@ namespace xcore
 
 		}
 
-		peer*	xnode::start(netip* _endpoint, allocator* _allocator, message_allocator* _message_allocator)
+		peer*	xnode::start(netip _endpoint, allocator* _allocator, message_allocator* _message_allocator)
 		{
 			init(xpeer::LOCAL_PEER, CONNECTED, _endpoint);
 
 			// Open the UDP socket 
-			udp_socket_.open("0.0.0.0", _endpoint->get_port());
+			udp_socket_.open("0.0.0.0", _endpoint.get_port());
 
 			return this;
 		}
@@ -173,7 +173,7 @@ namespace xcore
 			
 		}
 
-		xpeer*	_find_peer(lqueue<xpeer>* _peers, netip* _endpoint)
+		xpeer*	_find_peer(lqueue<xpeer>* _peers, netip const& _endpoint)
 		{
 			xpeer* peer = NULL;
 			if (_peers == NULL)
@@ -192,7 +192,7 @@ namespace xcore
 			return peer;
 		}
 
-		peer*	xnode::register_peer(netip* _endpoint)
+		peer*	xnode::register_peer(netip _endpoint)
 		{
 			xpeer* peer = _find_peer(inactive_peers_, _endpoint);
 			if (peer == NULL)

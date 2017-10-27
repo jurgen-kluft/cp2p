@@ -16,7 +16,7 @@ namespace xcore
 		u8		m_data[64];
 
 		s32		from_string(const char* str);
-		s32		to_string(const char* str, u32 maxstrlen);
+		s32		to_string(char* str, u32 maxstrlen) const;
 	};
 
 	struct udx_hash

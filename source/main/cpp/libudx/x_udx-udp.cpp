@@ -85,7 +85,10 @@ namespace xcore
 			// Before sending encode the packet
 			inf->encode();
 
+			// Push it out on the UDP socket
 			m_udp_socket->send((void*)hdr, inf->m_body_in_bytes + sizeof(udx_packet_hdr), inf->m_remote_endpoint->get_addrin());
+
+			// We have send it, timestamp the send moment
 			inf->m_timestamp_send_us = udx_time::get_time_us();
 
 			return false;

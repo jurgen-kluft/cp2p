@@ -29,7 +29,7 @@ namespace xcore
 		};
 
 
-		class MyAllocator : public iallocator
+		class MyAllocator : public allocator
 		{
 		public:
 			MyAllocator(x_iallocator* inSystemAllocator) : mSystemAllocator(inSystemAllocator) {}
@@ -64,13 +64,13 @@ namespace xcore
 		};
 
 
-		class MyMessageAllocator : public imessage_allocator
+		class MyMessageAllocator : public message_allocator
 		{
 		public:
 			MyMessageAllocator(x_iallocator* inSystemAllocator) : mSystemAllocator(inSystemAllocator) {}
 
 
-			virtual message*	allocate(ipeer* _from, ipeer* _to, u32 _flags)
+			virtual message*	allocate(peer* _from, peer* _to, u32 _flags)
 			{
 				void* mem = mOurAllocator->allocate(sizeof(message), sizeof(void*));
 				message* msg = new (mem)message(_from, _to, _flags);
@@ -95,11 +95,11 @@ namespace xcore
 				mOurAllocator->deallocate(_msg_block);
 			}
 
-			message*				allocate(ipeer* _from, ipeer* _to, u32 _flags, u32 _size)
+			message*				allocate(peer* _from, peer* _to, u32 _flags, u32 _size)
 			{
 				message* message = allocate(_from, _to, _flags);
 				message_block* block = allocate(_flags, _size);
-				message->add_block(block);
+				message->set_block(block);
 				return message;
 			}
 
@@ -126,9 +126,9 @@ namespace xcore
 		class MyPeer
 		{
 		public:
-			xp2p::inode*	node;
-			xp2p::ipeer*	host;
-			xp2p::ipeer*	remote;
+			xp2p::node*			node;
+			xp2p::peer*			host;
+			xp2p::peer*			remote;
 
 			MyAllocator*		ourSystemAllocator;
 			MyMessageAllocator*	ourMessageAllocator;
@@ -147,12 +147,15 @@ namespace xcore
 				ourSystemAllocator = MyAllocator::sCreate(inSystemAllocator);
 				ourMessageAllocator = MyMessageAllocator::sCreate(inSystemAllocator);
 
-				host = node->start(netip4().set_port(local_port), ourSystemAllocator, ourMessageAllocator);
+				netip	host_ip(local_port, 127, 0, 0, 1);
+				node->register_peer(host_ip);
+				host = node->start(host_ip, ourSystemAllocator, ourMessageAllocator);
 
 				// Let's connect to the remote if requested
 				if (remote_port > 0)
 				{
-					remote = node->register_peer(netip4(127, 0, 0, 1).set_port(remote_port));
+					netip	remote_ip(remote_port, 127, 0, 0, 1);
+					remote = node->register_peer(remote_ip);
 					node->connect_to(remote);
 				}
 			}
@@ -160,15 +163,15 @@ namespace xcore
 			void Tick(bool do_send_message)
 			{
 				incoming_messages* rcvd_messages = NULL;
-				gc_messages* sent_messages = NULL;
+				garbagec_messages* garb_messages = NULL;
 
-				if (node->event_loop(rcvd_messages, sent_messages, 100))	// Wait a maximum of 1000 ms
+				if (node->event_loop(rcvd_messages, garb_messages, 100))	// Wait a maximum of 1000 ms
 				{
 					outgoing_messages to_send;
 
 					while (rcvd_messages->has_message())
 					{
-						ipeer* from = rcvd_messages->get_from();
+						peer* from = rcvd_messages->get_from();
 						{
 							if (rcvd_messages->has_event())
 							{
@@ -194,7 +197,7 @@ namespace xcore
 								message_reader reader = rcvd_messages->get_reader();
 
 								char ip4_str[32];
-								from->get_ip4().to_string(ip4_str, sizeof(ip4_str));
+								from->get_ip().to_string(ip4_str, sizeof(ip4_str));
 
 								if (xbfIsSet(rcvd_messages->get_flags(), MSG_FLAG_ANNOUNCE))
 								{
@@ -204,7 +207,7 @@ namespace xcore
 								u32 msgStringLen = 0;
 								const char* msgString = "";
 								reader.view_string(msgString, msgStringLen);
-								Printf("info: message \"%s\"received from \"%s\"", x_va_list(x_va((const char*)msgString), x_va(ip4_str)));
+								ascii::printf("info: message \"%s\"received from \"%s\"", x_va_list(x_va((const char*)msgString), x_va(ip4_str)));
 							}
 						}
 
@@ -214,9 +217,9 @@ namespace xcore
 					node->send(to_send);
 
 					// release all messages that where sent
-					while (sent_messages->has_message())
+					while (garb_messages->has_message())
 					{
-						message* msg = sent_messages->dequeue();
+						message* msg = garb_messages->dequeue();
 						ourMessageAllocator->deallocate(msg);
 					}
 				}

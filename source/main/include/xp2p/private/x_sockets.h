@@ -156,7 +156,8 @@ namespace xcore
 
 		protected:
 			s32 mSocketDescriptor;
-			xudp(s32 descriptor = INVALID_SOCKET_DESCRIPTOR);
+
+					xudp(s32 descriptor);
 
 			bool open_socket(s32 type, s32 protocol);
 			void setBroadcast();

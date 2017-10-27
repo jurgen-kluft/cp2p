@@ -8,6 +8,7 @@
 #pragma once 
 #endif
 
+#include "xp2p\libudx\x_udx-alloc.h"
 
 namespace xcore
 {
@@ -16,14 +17,13 @@ namespace xcore
 	class udx_filter
 	{
 	public:
-		virtual void	init(u64* window, u32 size);
-
 		virtual u64		add(u64 value) = 0;
 		virtual u64		get() const = 0;
+
+		virtual void	release() = 0;
 	};
 
-
-
+	udx_filter*		gCreateSmaFilter(u32 wnd_size, udx_alloc* _allocator);
 }
 
 #endif

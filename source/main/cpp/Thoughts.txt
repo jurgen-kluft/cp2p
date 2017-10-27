@@ -15,7 +15,7 @@ PoCC (Performance Oriented Congestion Control)
 MI - Monitor Interval
 U  - Utility (the value indicating performance = Throughput - Loss)
 
-Why do we need to include timing fields in the to-send packets?
+Why do we need to include timing fields in the to-send packet?s
 RTT can be computed from remembering when a packet was send and when we received
 an ACK for this packet.
 The only info in a packet is
@@ -35,3 +35,5 @@ The only info in a packet is
 	send back and include that as micro-seconds in the packet.
 
 (A) receives back a packet that includes
+
+
