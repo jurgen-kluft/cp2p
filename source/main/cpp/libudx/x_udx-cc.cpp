@@ -47,15 +47,15 @@ namespace xcore
 	/*
 	Performance Monitoring
 
-		The timeline is sliced into chunks of duration of T-m called 
+		The timeline is sliced into chunks of duration of T[m] called 
 		the Monitor Interval (MI). When the Sending Module sends 
 		packets (new or retransmission) at a certain sending rate 
 		instructed by the Performance-oriented Rate Control Module, 
 		the Monitor Module will remember what packets
 		are sent out during each MI. As the SACK comes back
 		from receiver, the Monitor will know what happened
-		(received?  lost?  RTT?) to each packet sent out dur-
-		ing an MI. The Monitor knows what packets were sent during 
+		(received?  lost?  RTT?) to each packet sent out during an MI. 
+		The Monitor knows what packets were sent during 
 		MI[1], spanning T[0] to T[0]+T[m], and at time T[1], approximately 
 		one RTT after T[0] + T[m], it gets the SACKs for all packets sent 
 		out in MI[1]. The Monitor aggregates these individual SACKs
@@ -132,71 +132,42 @@ namespace xcore
 
 	struct MI_Instance
 	{
-		double	mInterval;
-		double	mStartTime;
+		double	mT,mTs,mTe;
 
-		void	begin(double time, double interval, udx_seqnr ack_base)
+		void	begin(double _time, double _interval, udx_seqnr _seqnr)
 		{
-			mInterval = interval;
-			mStartTime = time;
+			mT  = _time;
+			mTs = _time;
+			mTe = _time + _interval;
 		}
 
-		void	send(double time, udx_seqnr pkt_base, udx_bitstream const& pkt)
+		bool	tick(double _time)
 		{
-			// keep track of total
+			if (mT + _time > mTe)	// Is time beyond mTe + RTT ? 
+				return false;		// If so we are done!
+
+			// Can we still receive ACKs that are part of our interval?
+
+			return true;
 		}
 
-		void	acks(double time, udx_seqnr ack_base, udx_bitstream const& acks)
-		{
 
-			// detect missing packets
-			// ended;
-			//    when receiving acks beyond our range and 
-			//    (time - start_time) > interval this monitor 
-			//    has ended
-
-		}
-
-		double	mSendBytes;
-		double	mLostBytes;
 	};
+
+	static double	sComputeUtility(double _time, udx_rtt* rtt, udx_perfmon* perf) const
+	{
+		double const t = (double)perf->get_total();
+		double const l = (double)perf->get_loss();
+		double const U = ((t - l) / _time*(1 - 1 / (1 + exp(-100 * (l / t - 0.05)))) - 1 * l / _time);
+		return U;
+	}
 
 	struct MI_History
 	{
-		MI_Instance		m[4*4];
+		MI_Instance		m[32];
 		s32				mCurrent;
 	};
 
-	struct StartingState
-	{
-		double		mMSS;
-		double		mRTT;
-
-		double		mLoss;
-		double		mTotal;
-
-		double		mRate;
-
-		void		begin()
-		{
-			mRate = 2 * mMSS / mRTT;
-		}
-
-		void		update(double delta_time_us)
-		{
-			if (mLoss < 0)
-				mLoss = 0;
-
-			if (mRTT == 0)
-			{
-				// "RTT cannot be 0!!!"
-			}
-
-			double time = delta_time_us;
-			double utility = ((mTotal - mLoss) / time*(1 - 1 / (1 + exp(-100 * (mLoss / mTotal - 0.05)))) - 1 * mLoss / time);
-
-		}
-	};
 
 	/*
 	STATE = Decision Making State
@@ -211,30 +182,30 @@ namespace xcore
 		the rate back to r and keeps aggregating SACKs until
 		the Monitor generates utility value for these four trials.
 		For each pair i∈1,2, PCC gets two utility measure-
-		ments U+i,U−i corresponding to r(1+ε),r(1−ε) respectively.
+		ments U+i,U−i corresponding to r.(1+ε),r.(1−ε) respectively.
 		If the higher rate consistently has higher utility (U+i>U−i∀i∈{1,2}),
-		then PCC adjusts its sending rate to r new=r(1+ε);
+		then PCC adjusts its sending rate to r[new]=r.(1+ε);
 		and if the lower rate consistently has higher utility then PCC picks
-		r new = r(1−ε). However, if the results are inconclusive, e.g.
+		r[new] = r.(1−ε). However, if the results are inconclusive, e.g.
 		U+1>U−1 but U+2<U−2, PCC stays at its current rate r and re-enters
 		the Decision Making State with larger experiment granularity,
-		ε=ε+εmin. The granularity starts from εmin when it enters the
+		ε=ε+ε[min]. The granularity starts from ε[min] when it enters the
 		decision making system for the first time and will increase up to
-		εmax if the process continues to be inconclusive.
+		ε[max] if the process continues to be inconclusive.
 		This increase of granularity helps PCC avoid getting stuck due to
-		noise. Unless otherwise stated, we use εmin=0.01 and εmax=0.05.
+		noise. Unless otherwise stated, we use ε[min]=0.01 and ε[max]=0.05.
 	*/
 	
 	
 	/*
 	STATE = Rate Adjusting State
 
-		Assume the new rate after 'Decision Making State' is r0 and dir=±1 
+		Assume the new rate after 'Decision Making State' is r[0] and dir=±1 
 		is the chosen moving direction. In each MI, PCC adjusts its rate in 
-		that direction faster and faster, setting the new rate rn as: 
-			 rn = rn − 1·(1+n·εmin·dir).
-		However, if utility falls, i.e. U(rn)<U(rn−1), PCC reverts its rate 
-		to rn−1 and moves back to the 'Decision Making State'.
+		that direction faster and faster, setting the new rate r[n] as: 
+			 r[n] = r[n] − 1·(1+n·ε[min]·dir).
+		However, if utility falls, i.e. U(r[n])<U(r[n]−1), PCC reverts its rate 
+		to r[n]−1 and moves back to the 'Decision Making State'.
 	*/
 
 
@@ -460,7 +431,7 @@ namespace xcore
 		s32 m_change_intense;
 		s32 m_guess_time;
 
-		void	on_monitor_end(u64 current_time_us)
+		void	on_monitor_end(u64 interval_time_us)
 		{
 			double utility;
 			double t = m_total;

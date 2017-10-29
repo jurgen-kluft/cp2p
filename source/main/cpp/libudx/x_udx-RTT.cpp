@@ -1,10 +1,10 @@
-#include "xbase\x_target.h"
-#include "xp2p\x_sha1.h"
-#include "xp2p\libudx\x_udx.h"
-#include "xp2p\libudx\x_udx-rtt.h"
-#include "xp2p\libudx\x_udx-ack.h"
-#include "xp2p\libudx\x_udx-seqnr.h"
-#include "xp2p\libudx\x_udx-packetqueue.h"
+#include "xbase/x_target.h"
+#include "xp2p/x_sha1.h"
+#include "xp2p\libudx/x_udx.h"
+#include "xp2p\libudx/x_udx-rtt.h"
+#include "xp2p\libudx/x_udx-ack.h"
+#include "xp2p\libudx/x_udx-seqnr.h"
+#include "xp2p\libudx/x_udx-packetqueue.h"
 
 #include <chrono>
 
@@ -13,9 +13,9 @@ namespace xcore
 	/*
 	RTT - Round Trip Time
 
-	For UDX with PCC we are only interested in an average RTT and derived RTO.
-	Since RTT is not used to modify 'cwnd' (since we only have rate) it is not
-	necessary to measure at a high frequency.
+		For UDX with PCC we are only interested in an average RTT and derived RTO.
+		Since RTT is not used to modify 'cwnd' (since we only have rate) it is not
+		necessary to measure at a high frequency.
 
 	Note: This is an exponential moving average accumulator. Add samples to it 
 	      and it keeps track of a moving mean value and an average deviation.
@@ -33,18 +33,11 @@ namespace xcore
 
 		}
 
+		virtual s64		get_rtt_us() const		{ return m_rtt; }
+		virtual s64		get_rto_us() const		{ return m_rto; }
+
 		virtual void	update(udx_packet* pkt);
-
-		virtual s64		get_rtt_us() const
-		{
-			return ;
-		}
-
-		virtual s64		get_rto_us() const
-		{
-			return m_rto;
-		}
-
+		
 	protected:
 		s64			m_inverted_gain;
 		s64			m_num_samples;

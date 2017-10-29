@@ -1,8 +1,8 @@
-//==============================================================================
-//  x_udx-rtt.h
-//==============================================================================
-#ifndef __XP2P_UDX_RTT_H__
-#define __XP2P_UDX_RTT_H__
+//=======================================================================
+//  x_udx-perfmon.h
+//=======================================================================
+#ifndef __XP2P_UDX_PERFMON_H__
+#define __XP2P_UDX_PERFMON_H__
 #include "xbase/x_target.h"
 #ifdef USE_PRAGMA_ONCE 
 #pragma once 
@@ -17,17 +17,17 @@ namespace xcore
 	// --------------------------------------------------------------------------------------------
 	// [PUBLIC] API
 
-	class udx_rtt
+	class udx_perfmon
 	{
 	public:
 		virtual void	on_snd(u64 time, udx_seqnr segnr_base, udx_bitstream const& pkts) = 0;
 		virtual void	on_rcv(u64 time, udx_seqnr segnr_base, udx_bitstream const& acks) = 0;
 
-		virtual s64		get_rtt_us() const = 0;
-		virtual s64		get_rto_us() const = 0;
+		virtual s64		get_loss() const = 0;
+		virtual s64		get_total() const = 0;
 	};
 
-	udx_rtt*	gCreateDefaultRTT(udx_alloc* _allocator);
+	udx_perfmon*	gCreateDefaultPerfMon(udx_alloc* _allocator);
 }
 
 #endif
