@@ -24,6 +24,8 @@ namespace xcore
 		const static u64 NIL = 0xFFFFFFFFFFFFFFFFUL;
 		const static u64 MAX = 0x7FFFFFFFFFFFFFFFUL;
 		const static u64 MIN = 0;
+		const static u64 MASK_LOW = 0xFFFFFFFF >> (32 - NUM_BITS);
+		const static u64 MASK_HIGH = 0xFFFFFFFFFFFFFFFFUL << NUM_BITS;
 
 		inline		udx_seqnr() : m_seq_nr(NIL)						{ }
 		inline		udx_seqnr(u64 seqnr) : m_seq_nr(seqnr)			{ }
@@ -34,6 +36,8 @@ namespace xcore
 		u64			inc()											{ m_seq_nr++; }
 		u64			dec()											{ m_seq_nr--; }
 
+		u32			to_pktseqnr() const								{ return get() & MASK_LOW; }
+
 		udx_seqnr	operator =  (const udx_seqnr& other)			{ m_seq_nr = other.m_seq_nr; return *this; }
 
 		bool		operator == (const udx_seqnr& other) const		{ return get() == other.get(); }
@@ -43,6 +47,8 @@ namespace xcore
 		bool		operator <= (const udx_seqnr& other) const		{ return get() <= other.get(); }
 		bool		operator >= (const udx_seqnr& other) const		{ return get() >= other.get(); }
 
+		udx_seqnr	operator  - (const udx_seqnr& other) const		{ return udx_seqnr(get() - other.get()); }
+
 		static udx_seqnr	nil()									{ return udx_seqnr(NIL); }
 		static udx_seqnr	min()									{ return udx_seqnr(MIN); }
 		static udx_seqnr	max()									{ return udx_seqnr(MAX); }
@@ -51,40 +57,70 @@ namespace xcore
 		u64			m_seq_nr;
 	};
 
-	struct udx_seqnrs
+	// Outgoing packets get a continues sequence number
+	struct udx_seqnrs_out
 	{
-		const static u32 NUM_BITS = udx_seqnr::NUM_BITS;
-		const static u64 MASK_LOW = 0xFFFFFFFF >> (32 - NUM_BITS);
-		const static u64 MASK_HIGH = 0xFFFFFFFFFFFFFFFFUL << NUM_BITS;
-		const static u64 ONE = 1 << NUM_BITS;
-		const static u64 HALF = 1 << (NUM_BITS - 1);
-
-		udx_seqnr	new_seqnr()
+		udx_seqnr	get()
 		{
 			udx_seqnr seqnr(m_current_seq);
 			m_current_seq++;
 			return seqnr;
 		}
 		
-		udx_seqnr	from_pktseqnr(u32 seqnr) const
-		{
-			if (seqnr < HALF)
-			{
-				seqnr = seqnr + (m_current_seq & MASK_HIGH) + ONE;
-			}
-			else
-			{
-				seqnr = seqnr + (m_current_seq & MASK_HIGH);
-			}
-		}
+	private:
+		u64			m_current_seq;
+	};
 
-		u32			to_pktseqnr(udx_seqnr seqnr) const
+	// Incoming packets carry 24-bit sequence numbers and they need to
+	// be converted into a continues 64-bit sequence number.
+	struct udx_seqnrs_in
+	{
+		const static u32 NUM_BITS = udx_seqnr::NUM_BITS;
+		const static u64 MASK_LOW = 0xFFFFFFFF >> (32 - NUM_BITS);
+		const static u64 ONE = 1UL << (NUM_BITS);
+		const static u32 HALF = 1 << (NUM_BITS - 1);
+		const static u64 THRESHOLD = 1 << (NUM_BITS - 2);
+
+		udx_seqnr	get(u32 seqnr)
 		{
-			return seqnr.get() & MASK_LOW;
+			detect_carry(seqnr);
+			if (seqnr < HALF)
+				return udx_seqnr(((u64)seqnr & MASK_LOW) + m_current_seq + m_current_carry);
+			else
+				return udx_seqnr(((u64)seqnr & MASK_LOW) + m_current_seq);
 		}
 
 	private:
+		u64			m_below_half_count;
+		u64			m_above_half_count;
+		u64			m_current_carry;
 		u64			m_current_seq;
+
+		void		detect_carry(u32 seqnr)
+		{
+			// Logic here is to detect wrap around of the N-bit seqnr and put it into
+			// a 64-bit seqnr that is incremental and never wraps.
+			if (seqnr < HALF)
+			{
+				m_below_half_count += 1;
+				m_above_half_count = 0;
+			}
+			else
+			{
+				m_above_half_count += 1;
+				m_below_half_count = 0;
+			}
+
+			if (m_current_carry == 0 && m_above_half_count == THRESHOLD)
+			{
+				m_current_carry = ONE;
+			}
+			else if (m_current_carry != 0 && m_below_half_count == THRESHOLD)
+			{
+				m_current_seq += m_current_carry;
+				m_current_carry = 0;
+			}
+		}
 	};
 
 

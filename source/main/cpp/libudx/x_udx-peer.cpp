@@ -2,17 +2,16 @@
 #include "xp2p\x_sha1.h"
 #include "xp2p\libudx\x_udx.h"
 #include "xp2p\libudx\x_udx-ack.h"
-#include "xp2p\libudx\x_udx-alloc.h"
 #include "xp2p\libudx\x_udx-address.h"
-#include "xp2p\libudx\x_udx-packet.h"
+#include "xp2p\libudx\x_udx-alloc.h"
 #include "xp2p\libudx\x_udx-message.h"
-#include "xp2p\libudx\x_udx-registry.h"
+#include "xp2p\libudx\x_udx-packet.h"
 #include "xp2p\libudx\x_udx-peer.h"
-#include "xp2p\libudx\x_udx-udp.h"
-#include "xp2p\libudx\x_udx-rtt.h"
+#include "xp2p\libudx\x_udx-registry.h"
+#include "xp2p\libudx\x_udx-seqnr.h"
 #include "xp2p\libudx\x_udx-time.h"
-
-#include "xp2p\private\x_sockets.h"
+#include "xp2p\libudx\x_udx-rtt.h"
+#include "xp2p\libudx\x_udx-udp.h"
 
 namespace xcore
 {
@@ -58,15 +57,16 @@ namespace xcore
 		virtual bool 			is_connected() const;
 
 		virtual void			push_incoming(udx_packet* packet);
-		virtual bool			pop_incoming(udx_packet*& packet);
-
 		virtual void			push_outgoing(udx_packet* packet);
-		virtual bool			pop_outgoing(udx_packet*& packet);
 
 		// Process time-outs and deal with re-transmitting, disconnecting etc..
-		virtual void			process(u64 delta_time_us);
+		virtual void			process(u64 delta_time_us, udx_packet_writer* );
 
 	protected:
+		bool					pop_incoming(udx_packet *& packet);
+		bool					peek_outgoing(udx_packet*& packet);
+		bool					pop_outgoing(udx_packet*& packet);
+
 		void					push_inflight(udx_packet* packet);
 		bool					pop_inflight(udx_packet*& packet);
 
@@ -78,10 +78,12 @@ namespace xcore
 		udx_rtt*				m_rtt;			// RTT computer
 
 		udx_address*			m_address;
+		udx_seqnrs_in			m_seqnrs_in;
+		udx_seqnrs_out			m_seqnrs_out;
 
-		udx_packetqueue			m_incoming;		// received packets
-		udx_packetqueue			m_outgoing;		// user packets, to be send
-		udx_packetqueue			m_inflight;		// in-flight packets (not ACK-ed)
+		udx_packetsqueue		m_incoming;		// sequenced queue for incoming packets
+		udx_packetlqueue		m_outgoing;		// user packets, to be send
+		udx_packetsqueue		m_inflight;		// in-flight packets (not ACK-ed)
 	};
 
 	udx_socket_peer::udx_socket_peer(udx_alloc* _allocator, udx_alloc* _msg_allocator, udx_address* _address)
@@ -117,40 +119,51 @@ namespace xcore
 		udx_packet_hdr* packet_hdr = packet->get_hdr();
 
 		// Process ACK data immediately and see if we can reduce the 'inflight' queue.
-		if (packet_hdr->m_hdr_ack_size > 0)
+		if (packet_hdr->m_ack_size > 0)
 		{
-			udx_seqnr ack_seqnr = packet_hdr->m_hdr_ack_seqnr;
-			udx_bitstream ack_bstrm(packet_hdr->m_hdr_ack_size, packet_hdr->m_hdr_acks);
+			udx_seqnr ack_seqnr = packet_hdr->m_ack_seqnr;
+			udx_bitstream ack_bstrm(packet_hdr->m_ack_size, packet_hdr->m_acks);
 			udx_ack_reader ack_reader(ack_seqnr, ack_bstrm);
 			process_ACK(ack_reader);
 		}
 
-		m_incoming.enqueue(packet_hdr->m_hdr_pkt_seqnr, (void*)packet);
+		udx_seqnr seqnr = m_seqnrs_in.get(packet_hdr->m_pkt_seqnr);
+		m_incoming.insert(packet_hdr->m_pkt_seqnr, packet);
 	}
 
 	bool	udx_socket_peer::pop_incoming(udx_packet *& packet)
 	{
 		// Pop out the packets that are in-order.
-
+		udx_seqnr seqnr;
+		udx_packet* p = m_incoming.peek(seqnr);
+		if (p != NULL)
+		{
+			packet = m_incoming.dequeue(seqnr);
+			return true;
+		}
 		return false;
 	}
 
 	void	udx_socket_peer::push_outgoing(udx_packet * packet)
 	{
-		udx_packet_hdr* packet_hdr = packet->get_hdr();
-		m_outgoing.enqueue(packet_hdr->m_hdr_pkt_seqnr, (void*)packet);
+		m_outgoing.enqueue(packet);
+	}
+
+	bool	udx_socket_peer::peek_outgoing(udx_packet *& packet)
+	{
+		packet = m_outgoing.peek();
+		return (packet != NULL);
 	}
 
 	bool	udx_socket_peer::pop_outgoing(udx_packet *& packet)
 	{
-
-		return false;
+		packet = m_outgoing.dequeue();
+		return (packet != NULL);
 	}
 
 	void	udx_socket_peer::push_inflight(udx_packet * packet)
 	{
-		udx_packet_hdr* packet_hdr = packet->get_hdr();
-		m_inflight.enqueue(packet_hdr->m_hdr_pkt_seqnr, (void*)packet);
+		m_inflight.insert(packet->get_seqnr(), packet);
 	}
 
 	bool	udx_socket_peer::pop_inflight(udx_packet *& packet)
@@ -163,10 +176,22 @@ namespace xcore
 	void	udx_socket_peer::process_ACK(udx_ack_reader& ack_reader)
 	{
 		// Mark ACK-ed packets in the in-flight queue
+		bool acked;
+		udx_seqnr seqnr;
+		while (ack_reader.pop(seqnr, acked))
+		{
+			if (acked)
+			{
+				udx_packet* p = m_inflight.get(seqnr);
+				if (p != NULL)
+				{
 
+				}
+			}
+		}
 	}
 
-	void	udx_socket_peer::process(u64 delta_time_us)
+	void	udx_socket_peer::process(u64 delta_time_us, udx_packet_writer* writer)
 	{
 		// For our inflight queue check for any packets that
 		// have not received an ACK and are older than RTO.
@@ -176,8 +201,27 @@ namespace xcore
 		// ack packet to be send back.
 
 		// For all in-order incoming packets, iterate from oldest
-		// to latest and give them to the RTT computor.
+		// to latest and give them to the RTT computer.
 
+		udx_packet* packet_to_send;
+		while (peek_outgoing(packet_to_send))
+		{
+			//@TODO: Process ACKS into this packet
+
+			// Mark send time into this packet
+			udx_packet_inf* packet_info = packet_to_send->get_inf();
+			packet_info->m_timestamp_send_us = udx_time::get_time_us();
+
+			// Write out packet
+			if (!writer->write(packet_to_send))
+			{
+				break;
+			}
+
+			// Move this packet to the 'in-flight' queue
+			pop_outgoing(packet_to_send);
+			push_inflight(packet_to_send);
+		}
 	}
 
 }

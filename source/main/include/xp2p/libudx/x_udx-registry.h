@@ -8,22 +8,19 @@
 #pragma once 
 #endif
 
-#include "xbase\x_allocator.h"
-
 namespace xcore
 {
 	class udx_address;
-	class udx_socket;
-
-
+	class udx_peer;
 
 	// --------------------------------------------------------------------------------------------
 	// [PUBLIC] udx registry of 'address' to 'socket'
 	class udx_registry
 	{
 	public:
-		virtual udx_socket*		find(udx_address* key) = 0;
-		virtual void			add(udx_address* k, udx_socket* v) = 0;
+		virtual void			set(udx_address* k, udx_peer* v) = 0;
+		virtual udx_peer*		get(udx_address* key) = 0;
+		virtual bool			del(udx_address* key) = 0;
 	};
 
 

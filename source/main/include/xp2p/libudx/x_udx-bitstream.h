@@ -295,7 +295,7 @@ namespace xcore
 			}
 		}
 
-		void 		compact_range_RLE(u32 iter, u32 count, udx_bitstream& dest, u32 maxtrue=128, u32 maxfalse=16) const
+		void 		compress_range_RLE(u32 iter, u32 count, udx_bitstream& dest, u32 maxtrue=128, u32 maxfalse=8) const
 		{
 			u32 end = iter + count;
 			u32 diter = 0;
@@ -319,6 +319,27 @@ namespace xcore
 					dest.set_bit(diter++, (len & b == 1));
 					b >>= 1;
 				}
+			}
+		}
+
+		static void		uncompress_range_RLE(u32 iter, u32 count, udx_bitstream const& src, udx_bitstream& dest, u32 maxtrue = 128, u32 maxfalse = 8)
+		{
+			u32 end = iter + count;
+			u32 diter = 0;
+			while (iter < end)
+			{
+				u32 const from = iter;
+				bool const bit = src.is_true(iter++);
+				u32 b = bit ? (maxtrue) : (maxfalse);
+				u32 len = 0;
+				while (b != 0)
+				{
+					len = len << 1;
+					len = len | src.is_true(iter++) ? 1 : 0;
+					b >>= 1;
+				}
+				u32 const to = from + len;
+				dest.set_range_bit(from, to, bit);
 			}
 		}
 

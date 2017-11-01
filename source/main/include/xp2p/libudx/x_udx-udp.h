@@ -28,14 +28,26 @@ namespace xcore
 
 	// --------------------------------------------------------------------------------------------
 	// [PRIVATE] API
-	class udx_socket
+	class udx_packet_writer
 	{
 	public:
-		virtual bool	send(udx_packet*) = 0;
-		virtual bool	recv(udx_packet*) = 0;
+		virtual bool	write(udx_packet*) = 0;
 	};
 
-	udx_socket*		gCreateUdxSocket(udx_alloc* allocator, udp_socket* _udp_socket, udx_iaddress_factory* _address_factory, udx_iaddrin2address* _addrin_2_address);
+	class udx_packet_reader
+	{
+	public:
+		virtual bool	read(udx_packet*) = 0;
+	};
+
+	struct udx_socket_config
+	{
+		udp_socket*				m_udp_socket;
+		udx_iaddress_factory*	m_address_factory;
+		udx_iaddrin2address*	m_addrin_2_address;
+	};
+
+	void	gCreateUdxPacketReaderWriter(udx_alloc* allocator, udx_socket_config& _config, udx_packet_reader*& _out_reader, udx_packet_writer*& _out_writer);
 }
 
 #endif

@@ -1,25 +1,38 @@
 //==============================================================================
-//  x_udx-socket.h
+//  x_udx-peer.h
 //==============================================================================
-#ifndef __XP2P_UDX_SOCKET_H__
-#define __XP2P_UDX_SOCKET_H__
+#ifndef __XP2P_UDX_PEER_H__
+#define __XP2P_UDX_PEER_H__
 #include "xbase\x_target.h"
 #ifdef USE_PRAGMA_ONCE
 #pragma once
 #endif
 
-#include "xp2p\libudx\x_udx-packet.h"
-#include "xp2p\libudx\x_udx-packetqueue.h"
-
 namespace xcore
 {
+	class udx_alloc;
 	class udx_address;
+	class udx_packet;
+	class udx_packetlqueue;
+	class udx_packetsqueue;
+
 	struct udx_msg;
 
-	class udx_msg_handler
+	struct udx_peer_queues
+	{
+		udx_packetlqueue* outgoing;
+		udx_packetsqueue* incoming;
+		udx_packetlqueue* send;
+		udx_packetsqueue* wack;
+		udx_packetlqueue* garbage;
+	};
+
+	// --------------------------------------------------------------------------------------------
+	// [PUBLIC] API
+	class udx_peer_processor
 	{
 	public:
-		virtual void			handle_msg(udx_msg& msg) = 0;
+		virtual void			process() = 0;
 	};
 
 	// --------------------------------------------------------------------------------------------
@@ -39,7 +52,7 @@ namespace xcore
 		virtual bool			pop_incoming(udx_packet*&) = 0;
 		virtual bool 			pop_outgoing(udx_packet*&) = 0;
 
-		virtual void			process(u64 delta_time_us) = 0;
+		virtual void			process(u64 delta_time_us, udx_packet_writer* packet_writer) = 0;
 	};
 
 	udx_peer*	gCreateUdxPeer(udx_address* address, udx_alloc* allocator);

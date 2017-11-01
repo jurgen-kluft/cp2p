@@ -20,8 +20,9 @@ namespace xcore
 	class udx_rtt
 	{
 	public:
-		virtual void	on_snd(u64 time, udx_seqnr segnr_base, udx_bitstream const& pkts) = 0;
-		virtual void	on_rcv(u64 time, udx_seqnr segnr_base, udx_bitstream const& acks) = 0;
+		virtual void	reset() = 0;
+
+		virtual void	on_recv(u64 time_send_us, u64 time_recv_us, u64 remote_delay_us, udx_seqnr segnr) = 0;
 
 		virtual s64		get_rtt_us() const = 0;
 		virtual s64		get_rto_us() const = 0;

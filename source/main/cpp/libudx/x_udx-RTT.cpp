@@ -11,78 +11,118 @@
 namespace xcore
 {
 	/*
-	RTT - Round Trip Time
+	RTT - Round Trip Time and Retransmission Time Out
 
 		For UDX with PCC we are only interested in an average RTT and derived RTO.
 		Since RTT is not used to modify 'cwnd' (since we only have rate) it is not
 		necessary to measure at a high frequency.
 
-	Note: This is an exponential moving average accumulator. Add samples to it 
-	      and it keeps track of a moving mean value and an average deviation.
+
+	Note: This is an exponential moving average accumulator. Add samples to it
+		  and it keeps track of a moving mean value and an average deviation.
+
+
+	Note: Karn’s Algorithm
+
+		One mandatory algorithm that prevents the RTT measurement from giving false 
+		results is Karn’s Algorithm. It simply states that the RTT samples should 
+		not be taken for retransmitted packets.
+
+		In other words, the TCP sender keeps track whether the segment it sent was 
+		a retransmission and skips the RTT routine for those acknowledgments. 
+		This makes sense, since otherwise the sender could not distinguish acknowledgements 
+		between the original and retransmitted segment.
 	*/
 
 	class udx_rtt_pcc : public udx_rtt
 	{
 	public:
 		udx_rtt_pcc()
-			: m_inverted_gain(10)
-			, m_num_samples(0)
-			, m_mean(0)
-			, m_average_deviation(0)
 		{
-
+			reset();
 		}
 
-		virtual s64		get_rtt_us() const		{ return m_rtt; }
-		virtual s64		get_rto_us() const		{ return m_rto; }
+		virtual void	reset();
 
-		virtual void	update(udx_packet* pkt);
-		
+		virtual void	on_recv(u64 time_send_us, u64 time_recv_us, u64 remote_delay_us, udx_seqnr segnr);
+
+		virtual s64		get_rtt_us() const { return (s64)(m_rtt_ms * 1000); }
+		virtual s64		get_rto_us() const { return (s64)(m_rto_ms * 1000); }
+
+		XCORE_CLASS_PLACEMENT_NEW_DELETE
+
 	protected:
-		s64			m_inverted_gain;
-		s64			m_num_samples;
-		s64			m_mean;
-		s64			m_average_deviation;
+		double			m_rtt_ms;
+		double			m_rto_ms;
 
-		s64			mean() const
-		{
-			s64 rtt_1sec = (1000 * 1000);
-			return m_num_samples > 0 ? (m_mean + 32) / 64 : rtt_1sec;
-		}
-
-		s64			avg_deviation() const
-		{
-			return m_num_samples > 1 ? (m_average_deviation + 32) / 64 : 0;
-		}
-
-		s64			m_rtt;
-		s64			m_rto;
+		s32				m_measurements;
+		double			m_srtt3_last;		// srtt(k), srtt(k+1) - Jacobson
+		double			m_serr_last;		// serr(k), serr(k+1) - Jacobson
+		double			m_sdev_last;		// sdev(k), sdev(k+1) - Jacobson
 	};
 
-	void	udx_rtt_pcc::update(udx_packet* pkt)
+	//----- Defines -------------------------------------------------------------- 
+	const double	PARA_F = 4;			// The new TCP RTO constant factor "f"
+	const double	PARA_G = 0.125;		// "g" value in Jacobson's algorithm
+	const double	PARA_H = 0.25;		// "h" value in Jacobson's algorithm
+	const double	SRTT_0 = 1500;		// Initial value of smoothed RTT (ms)
+	const double	SDEV_0 = 0;			// Initial value of smoothed deviation
+	const double	MIN_RTO = 200.0;	// Minimum value of RTO (ms)
+	const double	MAX_RTO = 60000.0;	// Maximum value of RTO (ms)
+
+	void	udx_rtt_pcc::reset()
 	{
-		udx_packet_inf* pkt_inf = pkt->get_inf();
-		udx_packet_hdr* pkt_hdr = pkt->get_hdr();
-
-		s64 rtt_sample = (pkt_inf->m_timestamp_rcvd_us - pkt_inf->m_timestamp_send_us) - pkt_hdr->m_hdr_ack_delay_us;
-		rtt_sample *= 64;
-
-		s64 deviation = 0;
-		if (m_num_samples > 0)
-		{
-			deviation = abs(m_mean - rtt_sample);
-			if (m_num_samples > 1)
-			{
-				m_average_deviation += (deviation - m_average_deviation) / m_num_samples;
-			}
-		}
-
-		if (m_num_samples < m_inverted_gain)
-		{
-			++m_num_samples;
-		}
-
-		m_mean += (rtt_sample - m_mean) / m_num_samples;
+		m_rtt_ms = 0.0;
+		m_rto_ms = 1000.0;
+		m_measurements = 0;
 	}
 
+	void	udx_rtt_pcc::on_recv(u64 time_send_us, u64 time_recv_us, u64 remote_delay_us, udx_seqnr segnr)
+	{
+		s64 const rtt_us = (time_recv_us - time_send_us) - remote_delay_us;
+		double rtt_ms = (double)rtt_us / 1000.0;
+
+		double srtt3_now;		// srtt(k), srtt(k+1) - Jacobson
+		double serr_now;		// serr(k), serr(k+1) - Jacobson
+		double sdev_now;		// sdev(k), sdev(k+1) - Jacobson
+
+		// Calculate RTO using the Jacobson algorithm
+		if (m_measurements == 1)
+		{
+			srtt3_now = (1 - PARA_G) * SRTT_0 + PARA_G * rtt_ms;
+			serr_now = rtt_ms - SRTT_0;
+			sdev_now = (1 - PARA_H) * SDEV_0 + PARA_H * fabs(serr_now);
+			m_rto_ms = srtt3_now + PARA_F * sdev_now;
+		}
+		else
+		{
+			srtt3_now = (1 - PARA_G) * m_srtt3_last + PARA_G * rtt_ms;
+			serr_now = m_rtt_ms - m_srtt3_last;
+			sdev_now = (1 - PARA_H) * m_sdev_last + PARA_H * fabs(serr_now);
+			m_rto_ms = srtt3_now + PARA_F * sdev_now;
+		}
+
+		// Clamp RTO between MIN_RTO and MAX_RTO
+		if (m_rto_ms < MIN_RTO)
+			m_rto_ms = MIN_RTO;
+		else if (m_rto_ms > MAX_RTO)
+			m_rto_ms = MAX_RTO;
+
+		m_srtt3_last = srtt3_now;
+		m_serr_last = serr_now;
+		m_sdev_last = sdev_now;
+
+		m_rtt_ms = srtt3_now;
+
+		m_measurements += 1;
+	}
+
+	udx_rtt*	gCreateDefaultRTT(udx_alloc* _allocator)
+	{
+		x_cdtor_placement_new<udx_rtt_pcc> creator;
+		u32 const size = sizeof(udx_rtt_pcc);
+		void* mem = _allocator->alloc(size);
+		_allocator->commit(mem, size);
+		return creator.construct(mem);
+	}
 }

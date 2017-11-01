@@ -33,7 +33,7 @@ namespace xcore
 		like a 'Moving Average Smoothing Filter'.
 
 
-	1 Gbps ~= 93622 packets per second (average size of packet == 1400 bytes)
+	1 Gbps ~= 93622 packets per second (average size of packet == 1280 bytes)
 	0
 	UDX Goal:
 
@@ -44,6 +44,8 @@ namespace xcore
 	- udx:update should be called 
 
 	*/
+
+
 	/*
 	Performance Monitoring
 
@@ -132,18 +134,41 @@ namespace xcore
 
 	struct MI_Instance
 	{
-		double	mT,mTs,mTe;
+		double	mT_s, mTs_s, mTe_s;
 
-		void	begin(double _time, double _interval, udx_seqnr _seqnr)
+		void	begin(double _time_s, double _interval_s, double _rtt_s, udx_seqnr _seqnr)
 		{
-			mT  = _time;
-			mTs = _time;
-			mTe = _time + _interval;
+			mT_s = _time_s;
+			mTs_s = _time_s;
+			mTe_s = _time_s + _interval_s;
+
+			double pkt_snd_period_s = 0.001;
+
+			u64 mi_packet_count = 0;
+			if (((_rtt_s * 1.1) / pkt_snd_period_s) > 10)
+			{
+				double const rand_factor = double(rand() % 3) / 10;
+				mi_packet_count = (_rtt_s * (1.5 + rand_factor)) / pkt_snd_period_s;
+			}
+			else
+			{
+				double const packets_per_min_rtt = (0.005 / pkt_snd_period_s);
+				mi_packet_count = (packets_per_min_rtt < 10) ? 10 : packets_per_min_rtt;
+			}
+
+			// e.g:
+			// rtt_s             = 0.005 (5 ms)
+			// pkt_send_period_s = 0.001
+
+			// if (0.005 * 1.1 / 0.001 > 10)
+			// mi_packet_count   = (10 > (0.005 / 0.001)) ? 10 : (0.005 / 0.001);
+			// mi_packet_count   = 10;
+
 		}
 
-		bool	tick(double _time)
+		bool	tick(double _time_s)
 		{
-			if (mT + _time > mTe)	// Is time beyond mTe + RTT ? 
+			if (mT_s + _time_s > mTe_s)	// Is time beyond mTe + RTT ? 
 				return false;		// If so we are done!
 
 			// Can we still receive ACKs that are part of our interval?
@@ -154,7 +179,7 @@ namespace xcore
 
 	};
 
-	static double	sComputeUtility(double _time, udx_rtt* rtt, udx_perfmon* perf) const
+	static double	sComputeUtility(double _time, udx_rtt* rtt, udx_perf_monitor* perf) const
 	{
 		double const t = (double)perf->get_total();
 		double const l = (double)perf->get_loss();
@@ -436,7 +461,7 @@ namespace xcore
 			double utility;
 			double t = m_total;
 			double l = m_loss;
-			double time = current_time_us;
+			double time = interval_time_us;
 
 			if (l < 0)
 				l = 0;

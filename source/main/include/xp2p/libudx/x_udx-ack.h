@@ -27,9 +27,37 @@ namespace xcore
 	class udx_ack_builder
 	{
 	public:
-		void	build(udx_packet* p, udx_packetqueue* q)
+		s32		build(udx_packet_hdr* pkt_hdr, udx_packetsqueue* packet_queue)
 		{
-			udx_seqnr ackseqnr;
+			s32 num_acks = 0;
+
+			u32 c;
+			udx_seqnr s;
+			udx_packet* p;
+
+			if (packet_queue->begin(c, s, p))
+			{
+				u8* ackdata = pkt_hdr->m_hdr_acks;
+				u32 const ackmaxbits = sizeof(pkt_hdr->m_hdr_acks) * 8;
+				udx_bitstream ackbits(ackmaxbits, ackdata);
+				ackbits.set_range_false(0, ackmaxbits);
+
+				udx_seqnr const base_seqnr = s;
+				do
+				{
+					u32 const bitnr = (u32)((s - base_seqnr).get());
+					if (bitnr > ackbits.get_maxbits())
+						break;
+					num_acks = bitnr;
+					bool const bitval = (p != NULL);
+					ackbits.set_bit(bitnr, bitval);
+				} while (packet_queue->next(c, s, p));
+
+				pkt_hdr->m_hdr_ack_seqnr = base_seqnr.to_pktseqnr();
+				pkt_hdr->m_hdr_ack_type = udx_packet_hdr::ACK_TYPE_BITS;
+				pkt_hdr->m_hdr_ack_size = num_acks;
+			}
+			return (s32)num_acks;
 		}
 	};
 

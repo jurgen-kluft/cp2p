@@ -62,26 +62,22 @@ namespace xcore
 
 	// --------------------------------------------------------------------------------------------
 	// [PRIVATE] API
-	class udx_socket_imp : public udx_socket
+	class udx_packet_writer_imp : public udx_packet_writer
 	{
 		udp_socket*				m_udp_socket;
-		udx_iaddress_factory*	m_address_factory;
-		udx_iaddrin2address*	m_addrin_2_address;
 
 	public:
-		udx_socket_imp(udp_socket* _udp_socket, udx_iaddress_factory* _address_factory, udx_iaddrin2address* _addrin_2_address)
+		udx_packet_writer_imp(udp_socket* _udp_socket)
 			: m_udp_socket(_udp_socket)
-			, m_address_factory(_address_factory)
-			, m_addrin_2_address(_addrin_2_address)
 		{
 
 		}
 
-		virtual bool	send(udx_packet* pkt)
+		virtual bool	write(udx_packet* pkt)
 		{
 			udx_packet_inf* inf = pkt->get_inf();
 			udx_packet_hdr* hdr = pkt->get_hdr();
-			
+
 			// Before sending encode the packet
 			inf->encode();
 
@@ -94,7 +90,35 @@ namespace xcore
 			return false;
 		}
 
-		virtual bool	recv(udx_packet* pkt)
+		XCORE_CLASS_PLACEMENT_NEW_DELETE
+	};
+
+	static udx_packet_writer_imp*	CreatePacketWriter(udx_alloc* _allocator, udx_socket_config& _config)
+	{
+		u32 const size = sizeof(udx_packet_writer_imp);
+		void* mem = _allocator->alloc(size);
+		_allocator->commit(mem, size);
+		udx_packet_writer_imp* writer = new (mem) udx_packet_writer_imp(_config.m_udp_socket);
+		return writer;
+	}
+
+
+
+	class udx_packet_reader_imp : public udx_packet_reader
+	{
+		udp_socket*				m_udp_socket;
+		udx_iaddress_factory*	m_address_factory;
+		udx_iaddrin2address*	m_addrin_2_address;
+
+	public:
+		udx_packet_reader_imp(udp_socket* _udp_socket, udx_iaddress_factory* _address_factory, udx_iaddrin2address* _addrin_2_address)
+			: m_udp_socket(_udp_socket)
+			, m_address_factory(_address_factory)
+			, m_addrin_2_address(_addrin_2_address)
+		{
+
+		}
+		virtual bool	read(udx_packet* pkt)
 		{
 			udx_packet_inf* inf = pkt->get_inf();
 			udx_packet_hdr* hdr = pkt->get_hdr();
@@ -124,11 +148,22 @@ namespace xcore
 		XCORE_CLASS_PLACEMENT_NEW_DELETE
 	};
 
-	udx_socket*		gCreateUdxSocket(udx_alloc* allocator, udp_socket* _udp_socket, udx_iaddress_factory* _address_factory, udx_iaddrin2address* _addrin_2_address)
+	static udx_packet_reader_imp*	CreatePacketReader(udx_alloc* _allocator, udx_socket_config& _config)
 	{
-		void* udx_socket_imp_mem = allocator->alloc(sizeof(udx_socket_imp));
-		udx_socket_imp* imp = new (udx_socket_imp_mem) udx_socket_imp(_udp_socket, _address_factory, _addrin_2_address);
-		return imp;
+		u32 const size = sizeof(udx_packet_reader_imp);
+		void* mem = _allocator->alloc(size);
+		_allocator->commit(mem, size);
+		udx_packet_reader_imp* reader = new (mem) udx_packet_reader_imp(_config.m_udp_socket, _config.m_address_factory, _config.m_addrin_2_address);
+		return reader;
+	}
+
+
+
+
+	void	gCreateUdxPacketReaderWriter(udx_alloc* _allocator, udx_socket_config& _config, udx_packet_reader*& _out_reader, udx_packet_writer*& _out_writer)
+	{
+		_out_reader = CreatePacketReader(_allocator, _config);
+		_out_writer = CreatePacketWriter(_allocator, _config);
 	}
 
 }

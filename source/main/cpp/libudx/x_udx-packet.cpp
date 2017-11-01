@@ -36,8 +36,8 @@ namespace xcore
 	{
 		// Figure out the size of the header
 		udx_packet_hdr const* hdr = get_hdr();
-		u32 const real_ack_bytes = (hdr->m_hdr_ack_size + 7) / 8;
-		u32 const max_ack_bytes = sizeof(hdr->m_hdr_acks);
+		u32 const real_ack_bytes = (hdr->m_ack_size + 7) / 8;
+		u32 const max_ack_bytes = sizeof(hdr->m_acks);
 
 		// Compute the size of the udp packet
 		u32 const sizeof_hdr = sizeof(udx_packet_hdr);

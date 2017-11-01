@@ -3,10 +3,11 @@
 #include "xp2p\libudx\x_udx.h"
 #include "xp2p\libudx\x_udx-alloc.h"
 #include "xp2p\libudx\x_udx-address.h"
-#include "xp2p\libudx\x_udx-packet.h"
-#include "xp2p\libudx\x_udx-message.h"
-#include "xp2p\libudx\x_udx-registry.h"
 #include "xp2p\libudx\x_udx-host.h"
+#include "xp2p\libudx\x_udx-message.h"
+#include "xp2p\libudx\x_udx-peer.h"
+#include "xp2p\libudx\x_udx-registry.h"
+#include "xp2p\libudx\x_udx-packet.h"
 #include "xp2p\libudx\x_udx-udp.h"
 #include "xp2p\libudx\x_udx-time.h"
 
@@ -14,48 +15,6 @@
 
 namespace xcore
 {
-	struct udx_packet_list
-	{
-		u32				m_size;
-		udx_packet*		m_head;
-		udx_packet*		m_tail;
-
-		inline			udx_packet_list() : m_size(0), m_head(nullptr), m_tail(nullptr) {}
-
-		bool			is_empty() const { return m_size == 0; }
-
-		void			push(udx_packet* packet)
-		{
-			if (m_head == nullptr)
-			{
-				m_head = packet;
-				m_tail = packet;
-			}
-			else
-			{
-				udx_packet_inf* packet_info = m_tail->get_inf();
-				packet_info->m_next = packet;
-				m_tail = packet;
-			}
-			m_size += 1;
-		}
-
-		bool			pop(udx_packet*& packet)
-		{
-			if (is_empty())
-				return false;
-
-			packet = m_head;
-
-			udx_packet_inf* packet_info = m_head->get_inf();
-			m_head = packet_info->m_next;
-			packet_info->m_next = nullptr;
-			m_size -= 1;
-
-			return true;
-		}
-	};
-
 	struct udx_indices
 	{
 		u32*		m_indices;
@@ -298,43 +257,6 @@ namespace xcore
 		OUTGOING = 1
 	};
 
-	static void collect_packets(epacket_type ptype, udx_peer** peers, u32 max_peers, udx_packet_list& list)
-	{
-		u32 index = 0;
-		do
-		{
-			udx_peer* peer = peers[index];
-			if (peer != nullptr)
-			{
-				bool has_packet;
-				udx_packet* packet;
-				switch (ptype)
-				{
-					case INCOMING: has_packet = peer->pop_incoming(packet); break;
-					case OUTGOING: has_packet = peer->pop_incoming(packet); break;
-				}
-
-				if (has_packet)
-				{
-					udx_packet_inf* packet_info = packet->get_inf();
-					list.push(packet);
-				}
-				else
-				{
-					index = (index + 1) % max_peers;
-				}
-			}
-			else
-			{
-				do
-				{
-					index = (index + 1) % max_peers;
-					peer = peers[index];
-				} while (peer == nullptr && index != 0);
-			}
-		} while (index != 0);
-	}
-
 	void	udx_socket_host::process(u64 delta_time_us)
 	{
 		// Required:
@@ -393,7 +315,6 @@ namespace xcore
 				m_active_peers[peer_idx] = peer;
 			}
 
-			m_msg_alloc->dealloc(packet);
 		}
 
 		// For every 'active' udx socket
@@ -410,26 +331,19 @@ namespace xcore
 		}
 
 		// Iterate over all 'active' udx sockets and send their scheduled packets
-		collect_packets(OUTGOING, m_active_peers, m_max_peers, m_send_packets_list);
-
-		udx_packet* packet_to_send;
-		while (m_send_packets_list.pop(packet_to_send))
+		udx_packet_writer* packet_writer;
+		for (u32 i=0; i<m_max_peers; ++i)
 		{
-			udx_packet_inf* packet_info = packet_to_send->get_inf();
-			udx_addrin const & addrin = packet_info->m_remote_endpoint->get_addrin();
-
-			u32 udp_packet_size;
-			void* udp_packet_data = packet_to_send->to_udp(udp_packet_size);
-			packet_info->m_timestamp_send_us = udx_time::get_time_us();
-			if (!m_udp_socket2->send(udp_packet_data, udp_packet_size, addrin))
+			udx_peer* peer = m_active_peers[i];
+			if (peer != nullptr)
 			{
-				break;
+				peer->process(time, packet_writer);
 			}
 		}
 		
 		// Iterate over all 'active' udx sockets and collect received packets
 		// Build a singly linked list of all incoming packets (in-order!)
-		collect_packets(INCOMING, m_active_peers, m_max_peers, m_recv_packets_list);
+
 
 
 	}
