@@ -31,6 +31,7 @@ namespace xcore
 		inline		udx_seqnr(u64 seqnr) : m_seq_nr(seqnr)			{ }
 		inline		udx_seqnr(const udx_seqnr& o) : m_seq_nr(o.m_seq_nr) { }
 
+		bool		nill() const									{ return m_seq_nr == NIL; }
 		u64			get() const										{ return m_seq_nr; }
 
 		u64			inc()											{ m_seq_nr++; }

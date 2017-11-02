@@ -37,7 +37,7 @@ namespace xcore
 		u32						m_size_in_bytes : 12;			// Full size [packet_inf + packet_hdr + packet_hdr + body]
 		u32						m_body_in_bytes : 12;			// Actual body size for sending/receiving
 
-		u32						m_transmissions : 7;
+		u32						m_retransmissions : 7;			// Retransmission count
 		u32						m_need_resend : 1;
 		u32						m_is_acked : 1;
 		u32						m_used_for_rtt : 1;

@@ -93,7 +93,7 @@ namespace xcore
 		XCORE_CLASS_PLACEMENT_NEW_DELETE
 	};
 
-	static udx_packet_writer_imp*	CreatePacketWriter(udx_alloc* _allocator, udx_socket_config& _config)
+	static udx_packet_writer_imp*	CreatePacketWriter(udx_alloc* _allocator, udx_packet_rw_config& _config)
 	{
 		u32 const size = sizeof(udx_packet_writer_imp);
 		void* mem = _allocator->alloc(size);
@@ -148,7 +148,7 @@ namespace xcore
 		XCORE_CLASS_PLACEMENT_NEW_DELETE
 	};
 
-	static udx_packet_reader_imp*	CreatePacketReader(udx_alloc* _allocator, udx_socket_config& _config)
+	static udx_packet_reader_imp*	CreatePacketReader(udx_alloc* _allocator, udx_packet_rw_config& _config)
 	{
 		u32 const size = sizeof(udx_packet_reader_imp);
 		void* mem = _allocator->alloc(size);
@@ -160,7 +160,7 @@ namespace xcore
 
 
 
-	void	gCreateUdxPacketReaderWriter(udx_alloc* _allocator, udx_socket_config& _config, udx_packet_reader*& _out_reader, udx_packet_writer*& _out_writer)
+	void	gCreateUdxPacketReaderWriter(udx_alloc* _allocator, udx_packet_rw_config& _config, udx_packet_reader*& _out_reader, udx_packet_writer*& _out_writer)
 	{
 		_out_reader = CreatePacketReader(_allocator, _config);
 		_out_writer = CreatePacketWriter(_allocator, _config);

@@ -17,14 +17,14 @@ namespace xcore
 	class udx_rto_timer
 	{
 	public:
-		virtual void	start() = 0;
+		virtual void	start(udx_rtt* ) = 0;
 		virtual void	stop() = 0;
 
 		virtual bool	is_timeout(u64 current_time_us, u64 time_send_us) = 0;
 		virtual bool	on_timeout() = 0;
 	};
 
-	udx_rto_timer*	gCreateDefaultRTOTimer(udx_alloc* _allocator, udx_rtt* _rtt_computer);
+	udx_rto_timer*	gCreateDefaultRTOTimer(udx_alloc* _allocator);
 }
 
 #endif	// __XP2P_UDX_RTO_TIMER_H__

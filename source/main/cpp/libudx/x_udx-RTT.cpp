@@ -44,7 +44,7 @@ namespace xcore
 
 		virtual void	reset();
 
-		virtual void	on_recv(u64 time_send_us, u64 time_recv_us, u64 remote_delay_us, udx_seqnr segnr);
+		virtual void	on_ack(udx_packet const* p);
 
 		virtual s64		get_rtt_us() const { return (s64)(m_rtt_ms * 1000); }
 		virtual s64		get_rto_us() const { return (s64)(m_rto_ms * 1000); }
@@ -77,8 +77,15 @@ namespace xcore
 		m_measurements = 0;
 	}
 
-	void	udx_rtt_pcc::on_recv(u64 time_send_us, u64 time_recv_us, u64 remote_delay_us, udx_seqnr segnr)
+	void	udx_rtt_pcc::on_ack(udx_packet const* p)
 	{
+		udx_packet_inf const * info = p->get_inf();
+		u64 const time_send_us = info->m_timestamp_send_us;
+		u64 const time_recv_us = info->m_timestamp_rcvd_us;
+		udx_packet_hdr const * header = p->get_hdr();
+		u64 remote_delay_us = header->m_ack_delay_us;
+		udx_seqnr const segnr = header->m_pkt_seqnr;
+
 		s64 const rtt_us = (time_recv_us - time_send_us) - remote_delay_us;
 		double rtt_ms = (double)rtt_us / 1000.0;
 

@@ -40,14 +40,14 @@ namespace xcore
 		virtual bool	read(udx_packet*) = 0;
 	};
 
-	struct udx_socket_config
+	struct udx_packet_rw_config
 	{
 		udp_socket*				m_udp_socket;
 		udx_iaddress_factory*	m_address_factory;
 		udx_iaddrin2address*	m_addrin_2_address;
 	};
 
-	void	gCreateUdxPacketReaderWriter(udx_alloc* allocator, udx_socket_config& _config, udx_packet_reader*& _out_reader, udx_packet_writer*& _out_writer);
+	void	gCreateUdxPacketReaderWriter(udx_alloc* allocator, udx_packet_rw_config& _config, udx_packet_reader*& _out_reader, udx_packet_writer*& _out_writer);
 }
 
 #endif

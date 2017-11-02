@@ -8,6 +8,7 @@
 #include "xp2p\libudx\x_udx-peer.h"
 #include "xp2p\libudx\x_udx-registry.h"
 #include "xp2p\libudx\x_udx-packet.h"
+#include "xp2p\libudx\x_udx-packetqueue.h"
 #include "xp2p\libudx\x_udx-udp.h"
 #include "xp2p\libudx\x_udx-time.h"
 
@@ -53,6 +54,32 @@ namespace xcore
 		}
 	};
 
+	class udx_packet_garbage_collector : public udx_packet_writer
+	{
+		udx_alloc*		m_packet_allocator;
+	public:
+		inline			udx_packet_garbage_collector(udx_alloc* _packet_allocator) : m_packet_allocator(_packet_allocator) {}
+
+		virtual bool	write(udx_packet* p)
+		{
+			m_packet_allocator->dealloc(p);
+		}
+	};
+
+	class udx_packet_to_lqueue_collector : public udx_packet_writer
+	{
+		udx_packets_lqueue*	m_packet_queue;
+	public:
+		inline			udx_packet_to_lqueue_collector(udx_packets_lqueue*	packet_queue) : m_packet_queue(packet_queue) {}
+
+		virtual bool	write(udx_packet* p)
+		{
+			m_packet_queue->push(p);
+		}
+
+	};
+
+
 	// --------------------------------------------------------------------------------------------
 	// [PRIVATE] IMPLEMENTATION OF HOST
 	class udx_socket_host : public udx_host
@@ -92,17 +119,17 @@ namespace xcore
 		udx_peer_factory*		m_peer_factory;
 		
 		udp_socket*				m_udp_socket2;
-		udx_socket*				m_udx_socket;
+		udx_packet_reader*		m_packet_from_socket_reader;
+		udx_packet_writer*		m_packet_to_socket_writer;
 
 		u32						m_max_peers;
 		udx_peer**				m_all_peers;
 		u32						m_num_active_peers;
 		udx_peer**				m_active_peers;
 
-		udx_packet_list			m_recv_packets_list;
-		udx_packet_list			m_send_packets_list;
-
 		udx_indices				m_free_peer_indices;
+
+		udx_packets_lqueue		m_recv_packets_list;
 	};
 
 
@@ -114,7 +141,8 @@ namespace xcore
 		, m_address_factory(nullptr)
 		, m_peer_factory(nullptr)
 		, m_udp_socket2(nullptr)
-		, m_udx_socket(nullptr)
+		, m_packet_from_socket_reader(nullptr)
+		, m_packet_to_socket_writer(nullptr)
 		, m_max_peers(1024)
 		, m_all_peers(nullptr)
 		, m_num_active_peers(0)
@@ -132,9 +160,14 @@ namespace xcore
 		m_address_to_index = m_address_factory;
 
 		m_udp_socket2 = gCreateUdpSocket(m_sys_alloc);
-		m_udx_socket = gCreateUdxSocket(m_sys_alloc, m_udp_socket2, m_address_factory, m_addrin_to_address);
 
-		m_free_peer_indices.init(m_sys_alloc, 4096);
+		udx_packet_rw_config config;
+		config.m_address_factory = m_address_factory;
+		config.m_addrin_2_address = m_address_factory;
+		config.m_udp_socket = m_udp_socket2;
+		gCreateUdxPacketReaderWriter(m_sys_alloc, config, m_packet_from_socket_reader, m_packet_to_socket_writer);
+
+		m_free_peer_indices.init(m_sys_alloc, m_max_peers);
 	}
 
 	udx_address*	udx_socket_host::get_address() const
@@ -233,7 +266,7 @@ namespace xcore
 			if (peer != nullptr)
 			{
 				udx_packet* packet = udx_packet::from_user(msg.data_ptr, msg.data_size);
-				peer->push_outgoing(packet);
+				peer->send(packet);
 				return true;
 			}
 		}
@@ -246,26 +279,23 @@ namespace xcore
 		if (m_recv_packets_list.pop(packet))
 		{
 			msg.data_ptr = packet->to_user(msg.data_size);
+			from = packet->get_address();
 			return true;
 		}
+		from = NULL;
 		return false;
 	}
-
-	enum epacket_type
-	{
-		INCOMING = 0,
-		OUTGOING = 1
-	};
 
 	void	udx_socket_host::process(u64 delta_time_us)
 	{
 		// Required:
-		//  - Allocator to allocate memory for packets to receive
-		//  - Allocator to allocate new udx sockets
+		//  - Allocator to allocate memory for packets to send
+		//    and receive.
+		//  - Allocator to allocate udx objects like queues etc..
 
 		// Drain the UDP socket for incoming packets
-		//  - For every packet add it to the associated udx socket
-		//    If the udx socket doesn't exist create it and verify that
+		//  - For every received packet give it to the associated udx peer
+		//    If the udx peer doesn't exist create it and verify that
 		//    the packet is a SYN packet.
 
 		// NOTE:
@@ -274,19 +304,17 @@ namespace xcore
 		// - 'maximum peers' is not used yet
 		// - Connecting and Disconnecting many 'new' peers will result
 		//   in issues related to 'maximum peers'
+		// - RST and FIN packets are not processed yet
+		// - Destruction of a peer should garbage collect all packets
+		//   that the peer is holding on to.
 
-		udx_addrin addrin;
 		udx_packet* packet = (udx_packet*)m_msg_alloc->alloc(m_MTU);
-		while (m_udx_socket->recv(packet))
+		while (m_packet_from_socket_reader->read(packet))
 		{
 			udx_packet_inf* packet_inf = packet->get_inf();
-			udx_packet_hdr* packet_hdr = packet->get_hdr();
-
 			m_msg_alloc->commit(packet, packet_inf->m_size_in_bytes);
-
 			udx_address* address = packet_inf->m_remote_endpoint;
 
-			udx_peer* peer = nullptr;
 			u32 peer_idx;
 			if (!m_address_to_index->get_assoc(address, peer_idx))
 			{
@@ -297,54 +325,46 @@ namespace xcore
 				m_address_to_index->set_assoc(address, peer_idx);
 			}
 
-			peer = m_all_peers[peer_idx];
+			udx_peer* peer = m_all_peers[peer_idx];
 			if (peer == nullptr)
 			{	// Create the peer
 				peer = m_peer_factory->create_peer(address);
 				m_all_peers[peer_idx] = peer;
-				m_active_peers[peer_idx] = peer;
-				m_num_active_peers += 1;
 			}
 			
-			packet_inf->m_timestamp_rcvd_us = udx_time::get_time_us();;
-			peer->push_incoming(packet);
+			// Give the received packet to the peer for further handling.
+			peer->received(packet);
 
+			// Register this peer in the array of active peers
 			if (m_active_peers[peer_idx] == nullptr)
 			{
 				m_num_active_peers += 1;
 				m_active_peers[peer_idx] = peer;
 			}
-
 		}
 
-		// For every 'active' udx socket
-		//  - update RTT / RTO
-		//  - update CC
-		//  - construct ACK data ?
+		// For every 'active' udx peer
+		//  - process received packets
+		//  - update RTT / RTO, CC
+		//  - construct ACK data
+		//  - determine any packets to resend
+		//  - push packets on the socket
+		//  - collect garbage
+		udx_packet_garbage_collector packet_deallocator(m_msg_alloc);
+		udx_packet_writer* garbage_collector = &packet_deallocator;
+		udx_packet_to_lqueue_collector packets_to_queue_collector(&m_recv_packets_list);
+		udx_packet_writer* incoming_packet_collector = &packets_to_queue_collector;
 		for (u32 i = 0; i < m_num_active_peers; ++i)
 		{
 			udx_peer* peer = m_active_peers[i];
 			if (peer != nullptr)
 			{
-				peer->process(delta_time_us);
+				peer->process();
+				peer->writeto_socket(m_packet_to_socket_writer);
+				peer->collect_garbage(garbage_collector);
+				peer->collect_incoming(incoming_packet_collector);
 			}
 		}
-
-		// Iterate over all 'active' udx sockets and send their scheduled packets
-		udx_packet_writer* packet_writer;
-		for (u32 i=0; i<m_max_peers; ++i)
-		{
-			udx_peer* peer = m_active_peers[i];
-			if (peer != nullptr)
-			{
-				peer->process(time, packet_writer);
-			}
-		}
-		
-		// Iterate over all 'active' udx sockets and collect received packets
-		// Build a singly linked list of all incoming packets (in-order!)
-
-
 
 	}
 

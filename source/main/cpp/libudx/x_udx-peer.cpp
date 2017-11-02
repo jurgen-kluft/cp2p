@@ -11,10 +11,20 @@
 #include "xp2p\libudx\x_udx-seqnr.h"
 #include "xp2p\libudx\x_udx-time.h"
 #include "xp2p\libudx\x_udx-rtt.h"
+#include "xp2p\libudx\x_udx-rto_timer.h"
 #include "xp2p\libudx\x_udx-udp.h"
 
 namespace xcore
 {
+	struct udx_peer_queues
+	{
+		udx_packetlqueue* out;		// Outgoing queue, user wants these packets to be send
+		udx_packetsqueue* in;		// Incoming queue, packets that have been read from socket
+		udx_packetlqueue* snd;		// Send queue, to be written to socket
+		udx_packetsqueue* ack;		// In-flight queue, waiting to be ACK-ed
+		udx_packetlqueue* gc;		// Garbage queue, packets that have been succesfully send
+	};
+
 	// --------------------------------------------------------------------------------------------
 	// [PRIVATE] IMPLEMENTATION OF PEER (P2P CONNECTION)
 	// 
@@ -56,19 +66,31 @@ namespace xcore
 		virtual bool 			disconnect();
 		virtual bool 			is_connected() const;
 
-		virtual void			push_incoming(udx_packet* packet);
-		virtual void			push_outgoing(udx_packet* packet);
+		virtual void 			send(udx_packet*) = 0;
+		virtual void			received(udx_packet*) = 0;
 
-		// Process time-outs and deal with re-transmitting, disconnecting etc..
-		virtual void			process(u64 delta_time_us, udx_packet_writer* );
+		virtual void			process_transmit(udx_packet_writer* writer) = 0;
+		virtual void			collect_garbage(udx_packet_writer* writer) = 0;
 
 	protected:
+		void					push_incoming(udx_packet * packet);
 		bool					pop_incoming(udx_packet *& packet);
-		bool					peek_outgoing(udx_packet*& packet);
-		bool					pop_outgoing(udx_packet*& packet);
 
-		void					push_inflight(udx_packet* packet);
-		bool					pop_inflight(udx_packet*& packet);
+		void					push_outgoing(udx_packet * packet);
+		bool					peek_outgoing(udx_packet *& packet);
+		bool					pop_outgoing(udx_packet *& packet);
+
+		void					push_tosend(udx_packet * packet);
+		void					push_tosend_now(udx_packet * packet);
+		bool					peek_tosend(udx_packet *& packet);
+		bool					pop_tosend(udx_packet *& packet);
+
+		void					push_inflight(udx_packet * packet);
+		bool					peek_inflight(udx_packet *& packet);
+		bool					pop_inflight(udx_packet *& packet);
+
+		void					push_gc(udx_packet * packet);
+		bool					pop_gc(udx_packet *& packet);
 
 		void					process_ACK(udx_ack_reader& ack_reader);
 
@@ -76,14 +98,13 @@ namespace xcore
 		udx_alloc*				m_msg_alloc;
 
 		udx_rtt*				m_rtt;			// RTT computer
+		udx_rto_timer*			m_rto;			// RTO timer
 
 		udx_address*			m_address;
 		udx_seqnrs_in			m_seqnrs_in;
 		udx_seqnrs_out			m_seqnrs_out;
 
-		udx_packetsqueue		m_incoming;		// sequenced queue for incoming packets
-		udx_packetlqueue		m_outgoing;		// user packets, to be send
-		udx_packetsqueue		m_inflight;		// in-flight packets (not ACK-ed)
+		udx_peer_queues			m_queues;
 	};
 
 	udx_socket_peer::udx_socket_peer(udx_alloc* _allocator, udx_alloc* _msg_allocator, udx_address* _address)
@@ -117,28 +138,18 @@ namespace xcore
 	void	udx_socket_peer::push_incoming(udx_packet * packet)
 	{
 		udx_packet_hdr* packet_hdr = packet->get_hdr();
-
-		// Process ACK data immediately and see if we can reduce the 'inflight' queue.
-		if (packet_hdr->m_ack_size > 0)
-		{
-			udx_seqnr ack_seqnr = packet_hdr->m_ack_seqnr;
-			udx_bitstream ack_bstrm(packet_hdr->m_ack_size, packet_hdr->m_acks);
-			udx_ack_reader ack_reader(ack_seqnr, ack_bstrm);
-			process_ACK(ack_reader);
-		}
-
-		udx_seqnr seqnr = m_seqnrs_in.get(packet_hdr->m_pkt_seqnr);
-		m_incoming.insert(packet_hdr->m_pkt_seqnr, packet);
+		udx_seqnr const packet_seqnr = m_seqnrs_in.get(packet_hdr->m_pkt_seqnr);
+		m_queues.in->insert(packet_seqnr, packet);
 	}
 
 	bool	udx_socket_peer::pop_incoming(udx_packet *& packet)
 	{
 		// Pop out the packets that are in-order.
 		udx_seqnr seqnr;
-		udx_packet* p = m_incoming.peek(seqnr);
-		if (p != NULL)
+		m_queues.in->peek(seqnr, packet);
+		if (packet != NULL)
 		{
-			packet = m_incoming.dequeue(seqnr);
+			m_queues.in->dequeue(seqnr, packet);
 			return true;
 		}
 		return false;
@@ -146,30 +157,70 @@ namespace xcore
 
 	void	udx_socket_peer::push_outgoing(udx_packet * packet)
 	{
-		m_outgoing.enqueue(packet);
+		m_queues.out->push(packet);
 	}
 
 	bool	udx_socket_peer::peek_outgoing(udx_packet *& packet)
 	{
-		packet = m_outgoing.peek();
+		packet = m_queues.out->peek();
 		return (packet != NULL);
 	}
 
 	bool	udx_socket_peer::pop_outgoing(udx_packet *& packet)
 	{
-		packet = m_outgoing.dequeue();
+		packet = m_queues.out->pop();
+		return (packet != NULL);
+	}
+
+	void	udx_socket_peer::push_tosend(udx_packet * packet)
+	{
+		m_queues.snd->push(packet);
+	}
+
+	void	udx_socket_peer::push_tosend_now(udx_packet * packet)
+	{
+		m_queues.snd->push_front(packet);
+	}
+
+	bool	udx_socket_peer::peek_tosend(udx_packet *& packet)
+	{
+		packet = m_queues.snd->peek();
+		return (packet != NULL);
+	}
+
+	bool	udx_socket_peer::pop_tosend(udx_packet *& packet)
+	{
+		packet = m_queues.snd->pop();
 		return (packet != NULL);
 	}
 
 	void	udx_socket_peer::push_inflight(udx_packet * packet)
 	{
-		m_inflight.insert(packet->get_seqnr(), packet);
+		m_queues.ack->insert(packet->get_seqnr(), packet);
+	}
+
+	bool	udx_socket_peer::peek_inflight(udx_packet *& packet)
+	{
+		udx_seqnr seqnr;
+		return m_queues.ack->peek(seqnr, packet);
 	}
 
 	bool	udx_socket_peer::pop_inflight(udx_packet *& packet)
 	{
-		// Pop out the packets that are in-order and ACK-ed.
+		udx_seqnr seqnr;
+		m_queues.ack->peek(seqnr, packet);
+		if (packet != NULL && packet->get_inf()->m_is_acked)
+		{
+			m_queues.ack->dequeue(seqnr, packet);
 
+			// Move to next sequence number that has a packet
+			while (m_queues.ack->peek(seqnr, packet) == false)
+			{
+				udx_packet* null_packet;
+				m_queues.ack->dequeue(seqnr, null_packet);
+			}
+			return true;
+		}
 		return false;
 	}
 
@@ -182,8 +233,8 @@ namespace xcore
 		{
 			if (acked)
 			{
-				udx_packet* p = m_inflight.get(seqnr);
-				if (p != NULL)
+				udx_packet* p;
+				if (m_queues.ack->get(seqnr, p) && p != NULL)
 				{
 
 				}
@@ -191,35 +242,61 @@ namespace xcore
 		}
 	}
 
-	void	udx_socket_peer::process(u64 delta_time_us, udx_packet_writer* writer)
+	void	udx_socket_peer::received(udx_packet* packet)
+	{
+		// Does this packet have ACK information ?
+		// If so process the 'in-flight' queue with the ACK info
+		// and also inform the RTT computer of the ACK so as to
+		// update RTT and RTO.
+
+		push_incoming(packet);
+	}
+
+	void	udx_socket_peer::process_transmit(udx_packet_writer* writer)
 	{
 		// For our inflight queue check for any packets that
 		// have not received an ACK and are older than RTO.
 		// For those we need to mark them as resend
+		udx_packet* unacked_timedout_packet;
+		while (peek_inflight(unacked_timedout_packet))
+		{
+			udx_packet_inf* inf = unacked_timedout_packet->get_inf();
+			if (m_rto->is_timeout(udx_time::get_time_us(), inf->m_timestamp_send_us))
+			{
+				// RTO event on this packet, schedule for resend
+				inf->m_need_resend = true;
+				inf->m_retransmissions += 1;
+
+				// Insert this packet at the head of the 'to-send' queue
+
+			}
+		}
 
 		// Do we have new incoming packets, if so prepare an
 		// ack packet to be send back.
 
-		// For all in-order incoming packets, iterate from oldest
-		// to latest and give them to the RTT computer.
+		// Congestion control: move outgoing queued packets to the 'tosend' queue.
+		// Sending should only process the 'tosend' queue.
 
 		udx_packet* packet_to_send;
-		while (peek_outgoing(packet_to_send))
+		while (peek_tosend(packet_to_send))
 		{
 			//@TODO: Process ACKS into this packet
 
-			// Mark send time into this packet
-			udx_packet_inf* packet_info = packet_to_send->get_inf();
-			packet_info->m_timestamp_send_us = udx_time::get_time_us();
+			// Give it an outgoing sequence number
+			udx_packet_hdr* packet_hdr = packet_to_send->get_hdr();
+			packet_hdr->m_pkt_seqnr = m_seqnrs_out.get().to_pktseqnr();
 
-			// Write out packet
+			// Write out packet, at anytime the writer can decide to
+			// stop writing packets (socket full?)
 			if (!writer->write(packet_to_send))
-			{
 				break;
-			}
 
-			// Move this packet to the 'in-flight' queue
-			pop_outgoing(packet_to_send);
+			// Packet has been written succesfully, pop this packet from
+			// the 'tosend' queue and move it to the 'in-flight' queue.
+			// The 'in-flight' queue is a sequenced queue and there the
+			// packet will wait for an ACK and be subject to RTO.
+			pop_tosend(packet_to_send);
 			push_inflight(packet_to_send);
 		}
 	}

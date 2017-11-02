@@ -19,11 +19,19 @@ namespace xcore
 		udx_list_node*	m_next;
 		udx_list_node*	m_prev;
 
-		void			enqueue(udx_list_node* node)
+		void			push_back(udx_list_node* node)
 		{
 			node->m_prev = this;
 			node->m_next = m_next;
 			m_next = node;
+		}
+
+		void			push_front(udx_list_node* node)
+		{
+			node->m_next = this;
+			node->m_prev = m_prev;
+			m_prev->m_next = node;
+			m_prev = node;
 		}
 
 		udx_list_node*	head()
@@ -32,7 +40,7 @@ namespace xcore
 			return node;
 		}
 
-		udx_list_node*	dequeue()
+		udx_list_node*	pop_front()
 		{
 			udx_list_node* node = m_prev;
 			m_prev = node->m_prev;
@@ -55,9 +63,15 @@ namespace xcore
 			m_count = 0;
 		}
 
-		void			enqueue(udx_list_node* node)
+		void			push(udx_list_node* node)
 		{
-			m_root.enqueue(node);
+			m_root.push_back(node);
+			m_count += 1;
+		}
+
+		void			push_front(udx_list_node* node)
+		{
+			m_root.push_front(node);
 			m_count += 1;
 		}
 
@@ -72,26 +86,16 @@ namespace xcore
 			return true;
 		}
 
-		bool			dequeue(udx_list_node*& node)
+		bool			pop(udx_list_node*& node)
 		{
 			if (m_count == 0)
 			{
 				node = NULL;
 				return false;
 			}
-			node = m_root.dequeue();
+			node = m_root.pop_front();
 			m_count -= 1;
 			return true;
-		}
-
-		void			push(udx_list_node* node)
-		{
-			enqueue(node);
-		}
-
-		bool			pop(udx_list_node*& node)
-		{
-			return dequeue(node);
 		}
 
 	};

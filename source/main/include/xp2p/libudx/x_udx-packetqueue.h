@@ -21,7 +21,7 @@ namespace xcore
 	// to sender.
 	// Also the 'in-flight' queue which is waiting for ACK data to free acknowledged packets back
 	// to the user.
-	class udx_packetsqueue
+	class udx_packets_squeue
 	{
 	public:
 		typedef		udx_packet*	ITEM;
@@ -55,20 +55,27 @@ namespace xcore
 			m_queue.insert(seq_nr, p);
 		}
 
-		ITEM		get(udx_seqnr seq_nr)
+		bool		get(udx_seqnr seq_nr, ITEM& item)
 		{
-			return m_queue.get(seq_nr);
+			return m_queue.get(seq_nr, item);
 		}
 
-		ITEM		peek(udx_seqnr& seq_nr)
+		bool		peek(udx_seqnr& seq_nr, ITEM& item)
 		{
-			return m_queue.peek(seq_nr);
+			return m_queue.peek(seq_nr, item);
 		}
 
-		ITEM		dequeue(udx_seqnr& seq_nr)
+		bool		dequeue(udx_seqnr& seq_nr, ITEM& item)
 		{
-			ITEM p = m_queue.dequeue(seq_nr);
-			return p;
+			return m_queue.dequeue(seq_nr, item);
+		}
+
+		bool		dequeue_ff(udx_seqnr& seq_nr, ITEM& item)
+		{
+			while (m_queue.peek(seq_nr, item) && item == NULL)
+			{
+				m_queue.dequeue(seq_nr, item);
+			}
 		}
 
 		// 
@@ -77,15 +84,19 @@ namespace xcore
 		{
 			len = 0;
 			seqnr = m_queue.m_qhead;
-			item = m_queue.get(seqnr);
+			m_queue.get(seqnr, item);
 			return len < get_count();
 		}
+
 		bool		next(u32& len, udx_seqnr& seqnr, ITEM& item)
 		{
 			seqnr.inc();
-			item = m_queue.get(seqnr);
+			if (m_queue.get(seqnr, item) == false)
+				return false;
+
 			if (item != NULL)
 				len += 1;
+
 			return len < get_count();
 		}
 
@@ -114,58 +125,61 @@ namespace xcore
 				m_qcount = 0;
 			}
 
-			ITEM			get(udx_seqnr seq_nr)
+			bool			get(udx_seqnr seq_nr, ITEM& item)
 			{
-				u32 index = seq_nr.get() % m_qsize;
-				return m_items[index];
+				if (seq_nr >= m_qhead && seq_nr <= m_qtail)
+				{
+					u32 index = seq_nr.get() % m_qsize;
+					item = m_items[index];
+					return true;
+				}
+				return false;
 			}
 
-			ITEM			peek(udx_seqnr& seq_nr)
+			bool			peek(udx_seqnr& seq_nr, ITEM& item)
 			{
 				if (m_qcount == 0)
 				{
 					seq_nr = udx_seqnr::nil();
-					return NULL;
+					item = NULL;
+					return false;
 				}
 				u32 index = m_qhead.get() % m_qsize;
 				seq_nr = m_qhead;
 				ITEM p = m_items[index];
-				return p;
+				return true;
 			}
 
-			ITEM			dequeue(udx_seqnr& seq_nr)
+			bool			dequeue(udx_seqnr& seq_nr, ITEM& item)
 			{
 				if (m_qcount == 0)
 				{
 					seq_nr = udx_seqnr::nil();
-					return NULL;
+					item = NULL;
+					return false;
 				}
 				u32 const index = m_qhead.get() % m_qsize;
-				ITEM p = m_items[index];
-
+				item = m_items[index];
 				seq_nr = m_qhead;
+
 				m_qhead.inc();
-				if (p != NULL)
+				if (item != NULL)
 				{
 					m_items[index] = NULL;
 					m_qcount -= 1;
 				}
-				return p;
+				return true;
 			}
 
-			bool			insert(udx_seqnr seq_nr, ITEM p)
+			void			insert(udx_seqnr seq_nr, ITEM p)
 			{
 				u32 index = seq_nr.get() % m_qsize;
-				if ((p != NULL) && m_items[index] == NULL)
-				{
-					if (seq_nr < m_qhead)
-						m_qhead = seq_nr;
-					if (seq_nr > m_qtail)
-						m_qtail = seq_nr;
-					m_qcount++;
-					m_items[index] = p;
-					return true;
-				}
+				if (seq_nr < m_qhead)
+					m_qhead = seq_nr;
+				if (seq_nr > m_qtail)
+					m_qtail = seq_nr;
+				m_qcount++;
+				m_items[index] = p;
 			}
 		};
 		dqueue			m_queue;
@@ -175,7 +189,7 @@ namespace xcore
 	// [PUBLIC] API
 	// Basic packets queue using a list, mostly used for processing 'outgoing', 'garbage' and 
 	// 'received' packets.
-	class udx_packetlqueue
+	class udx_packets_lqueue
 	{
 		udx_list	m_list;
 
@@ -187,9 +201,14 @@ namespace xcore
 			return m_list.m_count;
 		}
 
-		void		enqueue(ITEM p)
+		void		push(ITEM p)
 		{
-			m_list.enqueue(p->get_list_node());
+			m_list.push(p->get_list_node());
+		}
+
+		void		push_front(ITEM p)
+		{
+			m_list.push_front(p->get_list_node());
 		}
 
 		ITEM		peek()
@@ -200,12 +219,15 @@ namespace xcore
 			return NULL;
 		}
 
-		ITEM		dequeue()
+		bool		pop(ITEM& item)
 		{
 			udx_list_node* node;
-			if (m_list.dequeue(node))
-				return (ITEM)node->m_item;
-			return NULL;
+			if (m_list.pop(node))
+			{
+				item = (ITEM)node->m_item;
+				return true;
+			}
+			return false;
 		}
 
 		// 
