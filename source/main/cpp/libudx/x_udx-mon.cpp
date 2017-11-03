@@ -53,8 +53,8 @@ namespace xcore
 	class udx_perf_monitor_pcc : public udx_perf_monitor
 	{
 	public:
-		virtual void	on_send(double _time_s, udx_seqnr pkt_segnr);
-		virtual void	on_recv(double _time_s, udx_seqnr ack_segnr);
+		virtual bool	on_send(double _time_s, udx_seqnr pkt_segnr);
+		virtual bool	on_recv(double _time_s, udx_seqnr ack_segnr);
 		virtual bool	on_loss(double _time_s, udx_seqnr pkk_segnr);
 
 		virtual s64		get_rate() const;

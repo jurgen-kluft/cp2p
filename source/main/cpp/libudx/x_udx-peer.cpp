@@ -18,11 +18,11 @@ namespace xcore
 {
 	struct udx_peer_queues
 	{
-		udx_packetlqueue* out;		// Outgoing queue, user wants these packets to be send
-		udx_packetsqueue* in;		// Incoming queue, packets that have been read from socket
-		udx_packetlqueue* snd;		// Send queue, to be written to socket
-		udx_packetsqueue* ack;		// In-flight queue, waiting to be ACK-ed
-		udx_packetlqueue* gc;		// Garbage queue, packets that have been succesfully send
+		udx_packets_lqueue* out;		// Outgoing queue, user wants these packets to be send
+		udx_packets_squeue* in;			// Incoming queue, packets that have been read from socket
+		udx_packets_lqueue* snd;		// Send queue, to be written to socket
+		udx_packets_squeue* ack;		// In-flight queue, waiting to be ACK-ed
+		udx_packets_lqueue* gc;			// Garbage queue, packets that have been succesfully send
 	};
 
 	// --------------------------------------------------------------------------------------------
@@ -168,8 +168,7 @@ namespace xcore
 
 	bool	udx_socket_peer::pop_outgoing(udx_packet *& packet)
 	{
-		packet = m_queues.out->pop();
-		return (packet != NULL);
+		return m_queues.out->pop(packet);
 	}
 
 	void	udx_socket_peer::push_tosend(udx_packet * packet)
@@ -190,8 +189,7 @@ namespace xcore
 
 	bool	udx_socket_peer::pop_tosend(udx_packet *& packet)
 	{
-		packet = m_queues.snd->pop();
-		return (packet != NULL);
+		return m_queues.snd->pop(packet);
 	}
 
 	void	udx_socket_peer::push_inflight(udx_packet * packet)

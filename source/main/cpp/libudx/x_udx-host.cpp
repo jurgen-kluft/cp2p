@@ -360,6 +360,7 @@ namespace xcore
 			if (peer != nullptr)
 			{
 				peer->process();
+
 				peer->writeto_socket(m_packet_to_socket_writer);
 				peer->collect_garbage(garbage_collector);
 				peer->collect_incoming(incoming_packet_collector);

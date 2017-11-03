@@ -2,6 +2,7 @@
 #include "xp2p\x_sha1.h"
 #include "xp2p\libudx\x_udx.h"
 #include "xp2p\libudx\x_udx-packet.h"
+#include "xp2p\libudx\x_udx-packetqueue.h"
 #include "xp2p\libudx\x_udx-bitstream.h"
 #include "xp2p\private\x_sockets.h"
 
@@ -132,65 +133,88 @@ namespace xcore
 		but such tweaks could be applied to TCP as well.
 	*/
 
-	struct MI_Instance
+	class MonitorInterval
 	{
-		double	mT_s, mTs_s, mTe_s;
+	public:
+		virtual void	begin(double _time_ms, double _rtt_ms, double _send_rate_ppms) = 0;
+		virtual bool	ended() const = 0;
 
-		void	begin(double _time_s, double _interval_s, double _rtt_s, udx_seqnr _seqnr)
+		virtual void	send(udx_seqnr _seqnr, double _time_ms) = 0;
+		virtual void	resend(udx_seqnr _seqnr, double _time_ms) = 0;
+		virtual void	lost(udx_seqnr _seqnr, double _time_ms) = 0;
+		
+		virtual u64		utility() const = 0;
+	};
+
+	class MonitorInterval_PCC : public MonitorInterval
+	{
+		double		m_start_ms;
+		u32			m_interval_p;
+		u32			m_total_p;
+		u32			m_loss_p;
+		u64			m_utility;
+
+	public:
+		bool	ended() const { return m_interval_p == 0; }
+
+		void	begin(double _time_ms, double _rtt_ms, double _send_rate_ppms)
 		{
-			mT_s = _time_s;
-			mTs_s = _time_s;
-			mTe_s = _time_s + _interval_s;
+			m_start_ms = _time_ms;
+			m_interval_p = 0;
 
-			double pkt_snd_period_s = 0.001;
+			// A monitor interval is based on the amount of packets received
+			// - Minimum duration is 10 packets if send-rate within RTT * 1.1 is < 10
+			// - Otherwise: 
+			// - If the current send-rate in 5 ms is less than 10 packets -> window = 10
+			// - Else window = send-rate-ppms * 5
 
-			u64 mi_packet_count = 0;
-			if (((_rtt_s * 1.1) / pkt_snd_period_s) > 10)
+			if (((_rtt_ms * 1.1) * _send_rate_ppms) > 10)
 			{
 				double const rand_factor = double(rand() % 3) / 10;
-				mi_packet_count = (_rtt_s * (1.5 + rand_factor)) / pkt_snd_period_s;
+				m_interval_p = (_rtt_ms * (1.5 + rand_factor)) * _send_rate_ppms;
 			}
 			else
 			{
-				double const packets_per_min_rtt = (0.005 / pkt_snd_period_s);
-				mi_packet_count = (packets_per_min_rtt < 10) ? 10 : packets_per_min_rtt;
+				double const packets_per_min_rtt = (5 * _send_rate_ppms);
+				m_interval_p = (packets_per_min_rtt < 10) ? 10 : packets_per_min_rtt;
 			}
 
-			// e.g:
-			// rtt_s             = 0.005 (5 ms)
-			// pkt_send_period_s = 0.001
-
-			// if (0.005 * 1.1 / 0.001 > 10)
-			// mi_packet_count   = (10 > (0.005 / 0.001)) ? 10 : (0.005 / 0.001);
-			// mi_packet_count   = 10;
-
+			m_total_p = m_interval_p;
+			m_loss_p = 0;
 		}
 
-		bool	tick(double _time_s)
+		virtual void	send(udx_seqnr _seqnr, double _time_ms)
 		{
-			if (mT_s + _time_s > mTe_s)	// Is time beyond mTe + RTT ? 
-				return false;		// If so we are done!
-
-			// Can we still receive ACKs that are part of our interval?
-
-			return true;
+			if (ended() == false)
+			{
+				// Can we still receive ACKs that are part of our interval?
+				m_interval_p -= 1;
+				if (m_interval_p == 0)
+				{
+					double const T_us = (_time_ms - m_start_ms) / 1000.0;
+					double const t = m_total_p;
+					double const l = m_loss_p;
+					double const U = ((t - l) / T_us * (1 - 1 / (1 + exp(-100 * (l / t - 0.05)))) - 1 * l / T_us);
+					
+					m_utility = (u64)(U * 1024.0 * 1024.0);
+				}
+			}
 		}
 
+		virtual void	resend(udx_seqnr _seqnr, double _time_ms)
+		{
+			send(_seqnr, _time_ms);
+		}
 
-	};
+		virtual void	lost(udx_seqnr _seqnr, double _time_ms)
+		{
+			if (ended() == false)
+			{
+				m_loss_p += 1;
+			}
+		}
 
-	static double	sComputeUtility(double _time, udx_rtt* rtt, udx_perf_monitor* perf) const
-	{
-		double const t = (double)perf->get_total();
-		double const l = (double)perf->get_loss();
-		double const U = ((t - l) / _time*(1 - 1 / (1 + exp(-100 * (l / t - 0.05)))) - 1 * l / _time);
-		return U;
-	}
-
-	struct MI_History
-	{
-		MI_Instance		m[32];
-		s32				mCurrent;
+		virtual u64 utility() const	{ return m_utility; }
 	};
 
 
@@ -241,7 +265,7 @@ namespace xcore
 	class CC_Sender
 	{
 	public:
-		virtual bool on_send(u32 packet_size) = 0;
+		virtual bool		on_send(u64 _time_us, udx_seqnr _packet_seqnr, u32 _packet_size) = 0;
 	};
 
 	// --------------------------------------------------------------------------------------------
@@ -249,25 +273,25 @@ namespace xcore
 	class CC_Receiver
 	{
 	public:
-		virtual void on_receive(u32 packet_size, u32 packet_seqnr, u32 ack_segnr, u8* ack_data, u32 ack_data_size) = 0;
+		virtual void		on_ack(u64 _time_us, udx_seqnr _packet_seqnr, u32 _packet_size) = 0;
+		virtual void		on_lost(u64 _time_us, udx_seqnr _packet_seqnr, u32 _packet_size) = 0;
+	};
+
+	// --------------------------------------------------------------------------------------------
+	// User Congestion-Control Input
+	class CC_Control
+	{
+	public:
+		virtual void		set_requested_rate(u64 send_rate_bytes_per_second) = 0;
 	};
 
 	// --------------------------------------------------------------------------------------------
 	// Generic Congestion-Control Controller
-	class CC_Control
+	class CC_Controller
 	{
 	public:
-		virtual void on_control_update() = 0;
+		virtual void		get_current_rate(u64 _time_us, u64& _out_rate_ppus) = 0;
 	};
-
-	// --------------------------------------------------------------------------------------------
-	// Generic Congestion-Control Monitor
-	class CC_Monitor
-	{
-	public:
-		virtual void on_monitor_update(u64 delta_time_us) = 0;
-	};
-
 
 	// --------------------------------------------------------------------------------------------
 	// [PRIVATE][CPP]
@@ -277,64 +301,19 @@ namespace xcore
 	// Performance oriented Congestion Control (PoCC)
 	// --------------------------------------------------------------------------------------------
 
-	class PoCC_Sender : public CC_Sender
+
+	class PoCC_Controller : public CC_Sender, public CC_Receiver, public CC_Control, public CC_Controller
 	{
 	public:
-		virtual void set_send_rate(u64 send_rate_bps) = 0;
+		virtual void		set_requested_rate(u64 send_rate_bytes_per_second);
+		virtual u64			get_computed_rate();
+
+		virtual bool		on_send(u64 _time_us, udx_seqnr _packet_seqnr, u32 _packet_size);
+		virtual void		on_ack(u64 _time_us, udx_seqnr _packet_seqnr, u32 _packet_size);
+		virtual void		on_lost(u64 _time_us, udx_seqnr _packet_seqnr, u32 _packet_size);
+
+		virtual void		get_current_rate(u64 _time_us, u64& _out_rate_ppus);
 	};
-
-	class PoCC_Control : public CC_Control
-	{
-	public:
-		virtual void on_monitor_report(u32 monitor_nr, u32 utility) = 0;
-	};
-
-	class PoCC_Utility
-	{
-	public:
-		virtual void compute_utility(u64 send_bytes, u64 lost_bytes, u64 RTT_us, u32& out_utility) = 0;
-	};
-
-	class PoCC_Monitor_Controller : public CC_Monitor, public CC_Receiver
-	{
-	public:
-
-	};
-
-	class PoCC : public PoCC_Sender, public PoCC_Control, public PoCC_Utility, public PoCC_Monitor_Controller
-	{
-	public:
-		virtual bool		on_send(u32 packet_size);
-		virtual void		set_send_rate(u64 send_rate_bytes_per_second);
-
-		virtual void		on_receive(u32 packet_size, u32 packet_seqnr, u32 ack_segnr, u8* ack_data, u32 ack_data_size);
-
-		virtual void		on_control_update();
-		virtual void		on_monitor_report(u32 monitor_nr, u32 utility);
-
-		virtual void		compute_utility(u64 transferred_bytes, u64 lost_packets, u64 time_period_us, u64 RTT_us, u32& out_utility);
-
-		virtual void		process();
-
-	protected:
-		virtual u32			on_monitor_start(u64 interval_us);
-		virtual void		on_monitor_update(u64 delta_time_us);
-	};
-
-	void PoCC::compute_utility(u64 transferred_bytes, u64 lost_packets, u64 time_period_us, u64 RTT_us, u32& out_utility)
-	{
-		double const time = (double)time_period_us / 1000000.0;
-		double const L = (double)lost_packets / time;
-		double const T = (double)transferred_bytes / time;
-
-		out_utility = ((T - L) / time * (1.0 - 1.0 / (1.0 + exp(-100.0 * (L / T - 0.05)))) - 1.0 * L / time);;
-	}
-
-
-	void	PoCC::process()
-	{
-
-	}
 
 	class PoCC_Monitor_Controller
 	{
