@@ -68,9 +68,9 @@ namespace xcore
 			PKT_TYPE_DATA = 8
 		};
 
-		u32						m_pkt_type : 4;				// SYN, FIN, RST, ACK, ACK|DATA
-		u32						m_xxx1 : 4;					// Unused
-		u32						m_pkt_seqnr : 24;			// Packet sequence number
+		u32						m_pkt_type : 4;				// [0] SYN, FIN, RST, ACK, ACK|DATA
+		u32						m_pkt_extn : 4;				// [0] Extension
+		u32						m_pkt_seqnr : 24;			// [0] Packet sequence number
 
 		// --- ACK ------ 
 		enum EAckType 
@@ -80,12 +80,12 @@ namespace xcore
 			ACK_TYPE_RLE = 4
 		};
 
-		u32						m_ack_type : 3;				// ACK type (ACK=1, BITS=2, RLE=4)
-		u32						m_ack_size : 9;				// ACK size in bits
-		u32						m_ack_delay_us : 20;		// ACK delay time in micro-seconds (the time it took at this end-point to reply to ack-seqnr)
+		u32						m_ack_type : 3;				// [1] ACK type (ACK=1, BITS=2, RLE=4)
+		u32						m_ack_size : 9;				// [1] ACK size in bits
+		u32						m_ack_delay_us : 20;		// [1] ACK delay time in micro-seconds (the time it took at this end-point to reply to ack-seqnr)
 
-		u32						m_ack_seqnr : 24;			// ACK sequence number
-		u32						m_xxx2 : 8;					// Unused
+		u32						m_ack_seqnr : 24;			// [2] ACK sequence number
+		u32						m_xxx2 : 8;					// [2] Unused
 
 		u8						m_acks[52];					// ACK bit stream (52 * 8 = max 416 bits)
 

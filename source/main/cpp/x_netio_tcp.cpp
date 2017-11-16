@@ -144,7 +144,7 @@ namespace xcore
 		}
 
 
-		class ns_server : public ns_iserver
+		class ns_server 
 		{
 		public:
 			inline				ns_server()
@@ -159,7 +159,7 @@ namespace xcore
 			void				release();
 
 			s32					bind(const char * addr);
-			ns_connection*		connect(netip4 ip);
+			ns_connection*		connect(netip ip);
 			void				disconnect(ns_connection*);
 
 			s32					poll(s32 milli);
@@ -182,8 +182,6 @@ namespace xcore
 			s32					read_from_socket(ns_connection * _conn);
 			s32					write_to_socket(ns_connection * _conn);
 
-			void				callback(ns_connection * conn, io_protocol::event ev, void *p);
-
 			ns_socket_t			listening_sock;
 			ns_socket_t			ctl[2];
 			ns_allocator *		allocator;
@@ -195,7 +193,7 @@ namespace xcore
 			XCORE_CLASS_PLACEMENT_NEW_DELETE
 		};
 
-		ns_iserver*			ns_create_server(ns_allocator* _allocator)
+		ns_server*			ns_create_server(ns_allocator* _allocator)
 		{
 			void* mem = _allocator->ns_allocate(sizeof(ns_server), sizeof(void*));
 			ns_server* server = new (mem) ns_server();
@@ -302,12 +300,12 @@ namespace xcore
 			this->active_connections[i] = c;
 			this->num_active_connections++;
 
-			xp2p::netip4 netip;
-			netip.ip_.aip_[0] = c->sa.sin.sin_addr.S_un.S_un_b.s_b1;
-			netip.ip_.aip_[1] = c->sa.sin.sin_addr.S_un.S_un_b.s_b2;
-			netip.ip_.aip_[2] = c->sa.sin.sin_addr.S_un.S_un_b.s_b3;
-			netip.ip_.aip_[3] = c->sa.sin.sin_addr.S_un.S_un_b.s_b4;
-			netip.port_ = c->sa.sin.sin_port;
+			xbyte b0 = c->sa.sin.sin_addr.S_un.S_un_b.s_b1;
+			xbyte b1 = c->sa.sin.sin_addr.S_un.S_un_b.s_b2;
+			xbyte b2 = c->sa.sin.sin_addr.S_un.S_un_b.s_b3;
+			xbyte b3 = c->sa.sin.sin_addr.S_un.S_un_b.s_b4;
+			u16 port = c->sa.sin.sin_port;
+			xp2p::netip netip(port, b0, b1, b2, b3);
 			c->io_connection_ = this->protocol->io_open(netip);
 		}
 
@@ -336,17 +334,11 @@ namespace xcore
 			return -1;
 		}
 				
-		void ns_server::callback(ns_connection * conn, io_protocol::event ev, void *p) 
-		{
-			if (this->protocol!=NULL)
-				this->protocol->io_callback(conn->io_connection_, ev, p);
-		}
-
 		void ns_server::close_conn(u32 conn_index)
 		{
 			DBG(("%p %d", conn, conn->flags));
 			ns_connection * conn = this->active_connections[conn_index];
-			callback(conn, io_protocol::EVENT_CLOSE, NULL);
+			this->protocol->io_callback(conn, io_protocol::EVENT_CLOSE, NULL);
 			this->protocol->io_close(conn->io_connection_);
 			remove_conn(conn_index);
 			closesocket(conn->sock.s);
@@ -572,7 +564,7 @@ namespace xcore
 					c->flags |= NSF_ACCEPTED;
 
 					add_conn(c);
-					callback(c, io_protocol::EVENT_ACCEPT, &sa);
+					protocol->io_callback(c, io_protocol::EVENT_ACCEPT, &sa);
 					DBG(("%p %d %p %p", c, c->sock, c->ssl, server->ssl_ctx));
 				}
 			}
@@ -664,7 +656,7 @@ namespace xcore
 				}
 				else
 				{
-					callback(_conn, io_protocol::EVENT_CONNECT, &ok);
+					this->protocol->io_callback(_conn, io_protocol::EVENT_CONNECT, &ok);
 				}
 			}
 			else
@@ -733,7 +725,7 @@ namespace xcore
 			for (s32 i=0; i<this->num_active_connections; ) 
 			{
 				ns_connection * conn = this->active_connections[i];
-				callback(conn, io_protocol::EVENT_POLL, &current_time);
+				this->protocol->io_callback(conn, io_protocol::EVENT_POLL, &current_time);
 				
 				if (xbfIsSet(conn->flags, NSF_CLOSE_IMMEDIATELY))
 				{
@@ -833,7 +825,7 @@ namespace xcore
 								xbfClear(conn->flags, NSF_CONNECTING);
 								xbfSet(conn->flags, NSF_CONNECTED);
 								s32 status = 1;
-								callback(conn, io_protocol::EVENT_CONNECT, &status);
+								this->protocol->io_callback(conn, io_protocol::EVENT_CONNECT, &status);
 							} 
 
 							conn->last_io_time = current_time;
@@ -861,7 +853,7 @@ namespace xcore
 			return this->num_active_connections;
 		}
 
-		ns_connection * ns_server::connect(netip4 netip) 
+		ns_connection * ns_server::connect(netip netip) 
 		{
 			ns_socket_t sock;
 			sockaddr_in sin;
@@ -870,10 +862,10 @@ namespace xcore
 
 			sin.sin_family = AF_INET;
 			sin.sin_port = htons((u16) netip.get_port());
-			sin.sin_addr.S_un.S_un_b.s_b1 = netip.ip_.aip_[0];
-			sin.sin_addr.S_un.S_un_b.s_b2 = netip.ip_.aip_[1];
-			sin.sin_addr.S_un.S_un_b.s_b3 = netip.ip_.aip_[2];
-			sin.sin_addr.S_un.S_un_b.s_b4 = netip.ip_.aip_[3];
+			sin.sin_addr.S_un.S_un_b.s_b1 = netip[0];
+			sin.sin_addr.S_un.S_un_b.s_b2 = netip[1];
+			sin.sin_addr.S_un.S_un_b.s_b3 = netip[2];
+			sin.sin_addr.S_un.S_un_b.s_b4 = netip[3];
 
 			// ! connect in non-blocking mode
 			ns_set_non_blocking_mode(sock);

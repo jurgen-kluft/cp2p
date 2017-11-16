@@ -13,35 +13,26 @@
 namespace xcore
 {
 	class udx_alloc;
-	class udx_bitstream;
 
 	// --------------------------------------------------------------------------------------------
 	// [PUBLIC] API
 
-	class udx_monitor
+	class udx_cc
 	{
 	public:
 		virtual void	reset() = 0;
 
-		virtual bool	on_send(double _time_s, udx_seqnr pkt_segnr) = 0;
-		virtual bool	on_recv(double _time_s, udx_seqnr ack_segnr) = 0;
-		virtual bool	on_loss(double _time_s, udx_seqnr ack_segnr) = 0;
+		virtual bool	on_send(double _time_s, u32 pkt_size, udx_seqnr pkt_segnr) = 0;
+		virtual bool	on_recv(double _time_s, u64 pkt_rtt_us, udx_seqnr pkt_segnr) = 0;
+		virtual bool	on_loss(double _time_s, u32 pkt_size, udx_seqnr pkt_segnr) = 0;
 
 		virtual s64		get_loss_rate() const = 0;
 		virtual s64		get_total_rate() const = 0;
+
+		virtual bool	can_send(u32 num_bytes) = 0;
 	};
 
-	class udx_perf_monitor
-	{
-	public:
-		virtual bool	on_send(double _time_s, udx_seqnr pkt_segnr) = 0;
-		virtual bool	on_recv(double _time_s, udx_seqnr ack_segnr) = 0;
-		virtual bool	on_loss(double _time_s, udx_seqnr ack_segnr) = 0;
-
-		virtual s64		get_rate() const = 0;
-	};
-
-	udx_perf_monitor*	gCreateDefaultPerformanceMonitor(udx_alloc* _allocator);
+	udx_cc*		gCreateDefaultCC(udx_alloc* _allocator);
 }
 
 #endif

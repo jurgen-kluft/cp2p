@@ -55,6 +55,8 @@ namespace xcore
 			bool		operator == (const netip& _other) const				{ return is_equal(_other); }
 			bool		operator != (const netip& _other) const				{ return !is_equal(_other); }
 
+			xbyte		operator [] (s32 index) const						{ return ip_[index]; }
+
 			void		to_string(char* s, u32 l) const;
 
 			bool		is_equal(const netip& ip) const
