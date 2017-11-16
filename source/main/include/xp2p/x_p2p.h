@@ -18,6 +18,7 @@ namespace xcore
 	// - Zer0 memory copy messaging
 	// - Peers are objects
 	// - Event loop
+	// - Message size <= 1400 bytes
 	// ==============================================================================================================================
 	namespace xp2p
 	{
