@@ -3,7 +3,7 @@
 //==============================================================================
 #ifndef __XP2P_UDX_MESSAGE_H__
 #define __XP2P_UDX_MESSAGE_H__
-#include "xbase\x_target.h"
+#include "xbase/x_target.h"
 #ifdef USE_PRAGMA_ONCE 
 #pragma once 
 #endif

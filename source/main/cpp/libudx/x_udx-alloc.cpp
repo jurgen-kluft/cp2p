@@ -1,10 +1,10 @@
-#include "xbase\x_target.h"
-#include "xbase\x_allocator.h"
+#include "xbase/x_target.h"
+#include "xbase/x_allocator.h"
 
-#include "xp2p\x_sha1.h"
-#include "xp2p\libudx\x_udx.h"
-#include "xp2p\libudx\x_udx-alloc.h"
-#include "xp2p\private\x_sockets.h"
+#include "xp2p/x_sha1.h"
+#include "xp2p/libudx/x_udx.h"
+#include "xp2p/libudx/x_udx-alloc.h"
+#include "xp2p/private/x_sockets.h"
 
 #include <chrono>
 

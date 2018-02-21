@@ -1,7 +1,7 @@
-#include "xbase\x_target.h"
+#include "xbase/x_target.h"
 
-#include "xp2p\libudx\x_udx.h"
-#include "xp2p\libudx\x_udx-message.h"
+#include "xp2p/libudx/x_udx.h"
+#include "xp2p/libudx/x_udx-message.h"
 
 namespace xcore
 {

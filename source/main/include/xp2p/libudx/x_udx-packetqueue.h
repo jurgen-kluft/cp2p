@@ -3,14 +3,14 @@
 //==============================================================================
 #ifndef __XP2P_UDX_PACKET_QUEUE_H__
 #define __XP2P_UDX_PACKET_QUEUE_H__
-#include "xbase\x_target.h"
+#include "xbase/x_target.h"
 #ifdef USE_PRAGMA_ONCE
 #pragma once
 #endif
 
-#include "xp2p\libudx\x_udx.h"
-#include "xp2p\libudx\x_udx-seqnr.h"
-#include "xp2p\libudx\x_udx-list.h"
+#include "xp2p/libudx/x_udx.h"
+#include "xp2p/libudx/x_udx-seqnr.h"
+#include "xp2p/libudx/x_udx-list.h"
 
 namespace xcore
 {

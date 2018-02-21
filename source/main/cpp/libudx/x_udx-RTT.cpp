@@ -1,10 +1,10 @@
 #include "xbase/x_target.h"
 #include "xp2p/x_sha1.h"
-#include "xp2p\libudx/x_udx.h"
-#include "xp2p\libudx/x_udx-rtt.h"
-#include "xp2p\libudx/x_udx-ack.h"
-#include "xp2p\libudx/x_udx-seqnr.h"
-#include "xp2p\libudx/x_udx-packetqueue.h"
+#include "xp2p/libudx/x_udx.h"
+#include "xp2p/libudx/x_udx-rtt.h"
+#include "xp2p/libudx/x_udx-ack.h"
+#include "xp2p/libudx/x_udx-seqnr.h"
+#include "xp2p/libudx/x_udx-packetqueue.h"
 
 #include <chrono>
 
@@ -22,10 +22,10 @@ namespace xcore
 		  and it keeps track of a moving mean value and an average deviation.
 
 
-	Note: Karn’s Algorithm
+	Note: Karnï¿½s Algorithm
 
 		One mandatory algorithm that prevents the RTT measurement from giving false 
-		results is Karn’s Algorithm. It simply states that the RTT samples should 
+		results is Karnï¿½s Algorithm. It simply states that the RTT samples should 
 		not be taken for retransmitted packets.
 
 		In other words, the TCP sender keeps track whether the segment it sent was 

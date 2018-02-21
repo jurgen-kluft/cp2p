@@ -3,12 +3,12 @@
 //==============================================================================
 #ifndef __XPEER_2_PEER_ALLOCATOR_H__
 #define __XPEER_2_PEER_ALLOCATOR_H__
-#include "xbase\x_target.h"
+#include "xbase/x_target.h"
 #ifdef USE_PRAGMA_ONCE 
 #pragma once 
 #endif
 
-#include "xp2p\x_types.h"
+#include "xp2p/x_types.h"
 
 namespace xcore
 {

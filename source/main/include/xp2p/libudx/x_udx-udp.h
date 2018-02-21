@@ -3,12 +3,12 @@
 //==============================================================================
 #ifndef __XP2P_UDX_UDP_H__
 #define __XP2P_UDX_UDP_H__
-#include "xbase\x_target.h"
+#include "xbase/x_target.h"
 #ifdef USE_PRAGMA_ONCE 
 #pragma once 
 #endif
 
-#include "xp2p\libudx\x_udx-alloc.h"
+#include "xp2p/libudx/x_udx-alloc.h"
 
 namespace xcore
 {

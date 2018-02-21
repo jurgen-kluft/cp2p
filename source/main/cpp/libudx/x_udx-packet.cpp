@@ -1,5 +1,5 @@
-#include "xbase\x_target.h"
-#include "xp2p\libudx\x_udx-packet.h"
+#include "xbase/x_target.h"
+#include "xp2p/libudx/x_udx-packet.h"
 
 namespace xcore
 {

@@ -1,11 +1,11 @@
 #ifndef __XP2P_PRACTICALSOCKET_INCLUDED__
 #define __XP2P_PRACTICALSOCKET_INCLUDED__
-#include "xbase\x_target.h"
+#include "xbase/x_target.h"
 #ifdef USE_PRAGMA_ONCE 
 #pragma once 
 #endif
 
-#include "xp2p\x_types.h"
+#include "xp2p/x_types.h"
 
 namespace xcore
 {
