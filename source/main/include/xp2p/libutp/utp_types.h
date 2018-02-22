@@ -20,7 +20,7 @@
 
 // hash.cpp needs socket definitions, which is why this networking specific
 // code is inclued in utypes.h
-#ifdef WIN32
+#ifdef TARGET_PC
 	#define _CRT_SECURE_NO_DEPRECATE
 	#define WIN32_LEAN_AND_MEAN
 	#include <windows.h>
@@ -51,7 +51,7 @@
 	typedef struct sockaddr_storage SOCKADDR_STORAGE;
 #endif
 
-#ifdef WIN32
+#ifdef TARGET_PC
 	#define I64u "%I64u"
 #else
 	#define I64u "%Lu"
@@ -91,10 +91,6 @@ CASSERT(8 == sizeof(int64), sizeof_int64_is_8)
 typedef const char * cstr;
 typedef char * str;
 
-#ifndef __cplusplus
-typedef uint8 bool;
-#endif
-
 // Received Packet
 struct utp_packet_rcvd
 {
@@ -102,7 +98,6 @@ struct utp_packet_rcvd
 	uint32	sizeofPacket;
 	void*	get_data() const { return (void*)((unsigned char*)this + sizeofHeader); }
 };
-
 
 class utp_allocator
 {
@@ -113,6 +108,5 @@ public:
 	virtual void*			utp_msg_allocate(uint32 _size) = 0;
 	virtual void			utp_msg_deallocate(void*) = 0;
 };
-
 
 #endif //__UTP_TYPES_H__

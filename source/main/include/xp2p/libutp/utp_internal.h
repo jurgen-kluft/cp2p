@@ -26,7 +26,7 @@ enum bandwidth_type_t
 	retransmit_overhead
 };
 
-#ifdef WIN32
+#ifdef TARGET_PC
 	#ifdef _MSC_VER
 		#include "libutp_inet_ntop.h"
 	#endif
