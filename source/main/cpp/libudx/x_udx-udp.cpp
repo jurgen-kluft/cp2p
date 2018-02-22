@@ -1,8 +1,8 @@
-#include "xbase\x_target.h"
-#include "xp2p\libudx\x_udx-address.h"
-#include "xp2p\libudx\x_udx-packet.h"
-#include "xp2p\libudx\x_udx-time.h"
-#include "xp2p\libudx\x_udx-udp.h"
+#include "xbase/x_target.h"
+#include "xp2p/libudx/x_udx-address.h"
+#include "xp2p/libudx/x_udx-packet.h"
+#include "xp2p/libudx/x_udx-time.h"
+#include "xp2p/libudx/x_udx-udp.h"
 
 #ifdef PLATFORM_PC
 #include <winsock2.h>         // For socket(), connect(), send(), and recv()

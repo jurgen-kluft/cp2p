@@ -1,10 +1,10 @@
-#include "xbase\x_target.h"
-#include "xbase\x_allocator.h"
+#include "xbase/x_target.h"
+#include "xbase/x_allocator.h"
 
-#include "xp2p\x_p2p.h"
-#include "xp2p\x_peer.h"
-#include "xp2p\private\x_peer_registry.h"
-#include "xp2p\private\x_allocator.h"
+#include "xp2p/x_p2p.h"
+#include "xp2p/x_peer.h"
+#include "xp2p/private/x_peer_registry.h"
+#include "xp2p/private/x_allocator.h"
 
 namespace xcore
 {

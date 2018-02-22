@@ -3,7 +3,7 @@
 //==============================================================================
 #ifndef __XPEER_2_PEER_TYPES_H__
 #define __XPEER_2_PEER_TYPES_H__
-#include "xbase\x_target.h"
+#include "xbase/x_target.h"
 #ifdef USE_PRAGMA_ONCE 
 #pragma once 
 #endif

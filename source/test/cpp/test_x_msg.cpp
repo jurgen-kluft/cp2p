@@ -1,7 +1,7 @@
-#include "xp2p\x_msg.h"
+#include "xp2p/x_msg.h"
 
-#include "xbase\x_allocator.h"
-#include "xunittest\xunittest.h"
+#include "xbase/x_allocator.h"
+#include "xunittest/xunittest.h"
 
 using namespace xcore;
 extern x_iallocator* gTestAllocator;

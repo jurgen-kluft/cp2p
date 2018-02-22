@@ -1,13 +1,13 @@
-#include "xbase\x_target.h"
-#include "xbase\x_allocator.h"
-#include "xbase\x_va_list.h"
-#include "xbase\x_string_ascii.h"
-#include "xbase\x_bit_field.h"
+#include "xbase/x_target.h"
+#include "xbase/x_allocator.h"
+#include "xbase/x_va_list.h"
+#include "xbase/x_string_ascii.h"
+#include "xbase/x_bit_field.h"
 
-#include "xp2p\x_p2p.h"
-#include "xp2p\x_peer.h"
-#include "xp2p\x_msg.h"
-#include "xp2p\private\x_allocator.h"
+#include "xp2p/x_p2p.h"
+#include "xp2p/x_peer.h"
+#include "xp2p/x_msg.h"
+#include "xp2p/private/x_allocator.h"
 
 namespace xcore
 {

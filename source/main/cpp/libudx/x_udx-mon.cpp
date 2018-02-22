@@ -1,12 +1,12 @@
 #include "xbase/x_target.h"
 #include "xp2p/x_sha1.h"
 
-#include "xp2p\libudx/x_udx.h"
-#include "xp2p\libudx/x_udx-mon.h"
-#include "xp2p\libudx/x_udx-rtt.h"
-#include "xp2p\libudx/x_udx-ack.h"
-#include "xp2p\libudx/x_udx-seqnr.h"
-#include "xp2p\libudx/x_udx-packetqueue.h"
+#include "xp2p/libudx/x_udx.h"
+#include "xp2p/libudx/x_udx-mon.h"
+#include "xp2p/libudx/x_udx-rtt.h"
+#include "xp2p/libudx/x_udx-ack.h"
+#include "xp2p/libudx/x_udx-seqnr.h"
+#include "xp2p/libudx/x_udx-packetqueue.h"
 
 #include <chrono>
 

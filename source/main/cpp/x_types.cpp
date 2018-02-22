@@ -1,9 +1,9 @@
-#include "xbase\x_target.h"
-#include "xbase\x_allocator.h"
-#include "xbase\x_string_ascii.h"
+#include "xbase/x_target.h"
+#include "xbase/x_allocator.h"
+#include "xbase/x_string_ascii.h"
 
-#include "xp2p\x_p2p.h"
-#include "xp2p\x_types.h"
+#include "xp2p/x_p2p.h"
+#include "xp2p/x_types.h"
 
 namespace xcore
 {

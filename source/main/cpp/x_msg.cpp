@@ -1,12 +1,12 @@
-#include "xbase\x_target.h"
-#include "xbase\x_allocator.h"
-#include "xbase\x_memory_std.h"
-#include "xbase\x_bit_field.h"
+#include "xbase/x_target.h"
+#include "xbase/x_allocator.h"
+#include "xbase/x_memory_std.h"
+#include "xbase/x_bit_field.h"
 
-#include "xp2p\private\x_netio_proto.h"
-#include "xp2p\private\x_netio.h"
+#include "xp2p/private/x_netio_proto.h"
+#include "xp2p/private/x_netio.h"
 
-#include "xp2p\x_msg.h"
+#include "xp2p/x_msg.h"
 
 namespace xcore
 {

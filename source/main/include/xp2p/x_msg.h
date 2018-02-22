@@ -3,13 +3,13 @@
 //==============================================================================
 #ifndef __XPEER_2_PEER_MSG_READER_WRITER_H__
 #define __XPEER_2_PEER_MSG_READER_WRITER_H__
-#include "xbase\x_target.h"
+#include "xbase/x_target.h"
 #ifdef USE_PRAGMA_ONCE 
 #pragma once 
 #endif
 
-#include "xbase\x_allocator.h"
-#include "xp2p\private\x_lqueue.h"
+#include "xbase/x_allocator.h"
+#include "xp2p/private/x_lqueue.h"
 
 namespace xcore
 {
