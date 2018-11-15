@@ -1,10 +1,6 @@
 #ifndef __UTP_H__
 #define __UTP_H__
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 #include <stdarg.h>
 #include "xp2p/libutp/utp_types.h"
 
@@ -108,8 +104,5 @@ utp_socket_stats* utp_get_stats					(utp_socket *s);
 utp_context*	utp_get_context					(utp_socket *s);
 void			utp_close						(utp_socket *s);
 
-#ifdef __cplusplus
-}
-#endif
 
 #endif //__UTP_H__

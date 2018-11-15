@@ -3,7 +3,7 @@
 #include "xp2p/libutp/utp.h"
 #include "xp2p/libutp/utp_types.h"
 
-#ifdef WIN32
+#ifdef TARGET_PC
 	#define WIN32_LEAN_AND_MEAN
 	#include <windows.h>
 	#include <winsock2.h>
@@ -19,7 +19,7 @@
 
 #include "xp2p/libutp/utp_utils.h"
 
-#ifdef WIN32
+#ifdef TARGET_PC
 
 typedef ULONGLONG (WINAPI GetTickCount64Proc)(void);
 static GetTickCount64Proc *pt2GetTickCount64;
@@ -91,7 +91,7 @@ static inline uint64 UTP_GetMilliseconds()
 	return GetTickCount();
 }
 
-#else //!WIN32
+#else //!TARGET_PC
 
 static inline uint64 UTP_GetMicroseconds(void);
 static inline uint64 UTP_GetMilliseconds()

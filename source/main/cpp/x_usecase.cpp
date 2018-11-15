@@ -102,7 +102,7 @@ namespace xcore
 			{
 				message* message = allocate(_from, _to, _flags);
 				message_block* block = allocate(_flags, _size);
-				message->add_block(block);
+				message->set_block(block);
 				return message;
 			}
 
@@ -192,7 +192,7 @@ namespace xcore
 									message_reader reader = rcvdmsg->get_reader();
 
 									char ip4_str[65];
-									tracker->get_ip()->to_string(ip4_str, sizeof(ip4_str));
+									tracker->get_ip().to_string(ip4_str, sizeof(ip4_str));
 
 									if (xbfIsSet(rcvdmsg->get_flags(), MSG_FLAG_ANNOUNCE))
 									{
@@ -202,7 +202,7 @@ namespace xcore
 									u32 msgStringLen = 0;
 									const char* msgString = "";
 									reader.view_string(msgString, msgStringLen);
-									Printf("info: message \"%s\"received from tracker \"%s\"", x_va_list(x_va((const char*)msgString), x_va(ip4_str)));
+									ascii::printf("info: message \"%s\"received from tracker \"%s\"", x_va_list(x_va((const char*)msgString), x_va(ip4_str)));
 								}
 							}
 							else
@@ -271,13 +271,13 @@ namespace xcore
 							{
 								message_reader reader = rcvdmsg->get_reader();
 								char ip4_str[65];
-								p->get_ip()->to_string(ip4_str, sizeof(ip4_str));
+								p->get_ip().to_string(ip4_str, sizeof(ip4_str));
 
 								/// Get a direct pointer to the string (instead of copying)
 								u32 msgStringLen = 0;
 								char const* msgString = "";
 								reader.view_string(msgString, msgStringLen);
-								Printf("info: message \"%s\"received from peer \"%s\"", x_va_list(x_va((const char*)msgString), x_va(ip4_str)));
+								ascii::printf("info: message \"%s\"received from peer \"%s\"", x_va_list(x_va((const char*)msgString), x_va(ip4_str)));
 
 								// Send back a message
 								message* tmsg = ourMessageAllocator->allocate(tracker, rcvdmsg->get_from(), MSG_FLAG_ANNOUNCE, 40);

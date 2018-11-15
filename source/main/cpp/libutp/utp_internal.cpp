@@ -2596,8 +2596,8 @@ UTPSocket::~UTPSocket()
 	removeSocketFromAckList(this);
 
 	// Free all memory occupied by the socket object.
-	inbuf.destructor(ctx->allocator);
-	outbuf.destructor(ctx->allocator);
+	inbuf.destructor();
+	outbuf.destructor();
 }
 
 void utp_initialize_socket(utp_socket *conn, const struct sockaddr *addr, socklen_t addrlen, bool need_seed_gen, uint32 conn_seed, uint32 conn_id_recv, uint32 conn_id_send)
