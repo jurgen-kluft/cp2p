@@ -6,5 +6,6 @@ import (
 )
 
 func main() {
+	xcode.Init()
 	xcode.Generate(xp2p.GetPackage())
 }
