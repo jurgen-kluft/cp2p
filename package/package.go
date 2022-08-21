@@ -1,34 +1,34 @@
-package xp2p
+package cp2p
 
 import (
-	"github.com/jurgen-kluft/xbase/package"
-	"github.com/jurgen-kluft/xcode/denv"
-	"github.com/jurgen-kluft/xentry/package"
-	"github.com/jurgen-kluft/xunittest/package"
+	"github.com/jurgen-kluft/cbase/package"
+	"github.com/jurgen-kluft/ccode/denv"
+	"github.com/jurgen-kluft/centry/package"
+	"github.com/jurgen-kluft/cunittest/package"
 )
 
-// GetPackage returns the package object of 'xp2p'
+// GetPackage returns the package object of 'cp2p'
 func GetPackage() *denv.Package {
 	// Dependencies
-	xunittestpkg := xunittest.GetPackage()
-	xentrypkg := xentry.GetPackage()
-	xbasepkg := xbase.GetPackage()
+	cunittestpkg := cunittest.GetPackage()
+	entrypkg := centry.GetPackage()
+	basepkg := cbase.GetPackage()
 
-	// The main (xp2p) package
-	mainpkg := denv.NewPackage("xp2p")
-	mainpkg.AddPackage(xunittestpkg)
-	mainpkg.AddPackage(xentrypkg)
-	mainpkg.AddPackage(xbasepkg)
+	// The main (cp2p) package
+	mainpkg := denv.NewPackage("cp2p")
+	mainpkg.AddPackage(cunittestpkg)
+	mainpkg.AddPackage(entrypkg)
+	mainpkg.AddPackage(basepkg)
 
-	// 'xp2p' library
-	mainlib := denv.SetupDefaultCppLibProject("xp2p", "github.com\\jurgen-kluft\\xp2p")
-	mainlib.Dependencies = append(mainlib.Dependencies, xbasepkg.GetMainLib())
+	// 'cp2p' library
+	mainlib := denv.SetupDefaultCppLibProject("cp2p", "github.com\\jurgen-kluft\\cp2p")
+	mainlib.Dependencies = append(mainlib.Dependencies, basepkg.GetMainLib())
 
-	// 'xp2p' unittest project
-	maintest := denv.SetupDefaultCppTestProject("xp2p_test", "github.com\\jurgen-kluft\\xp2p")
-	maintest.Dependencies = append(maintest.Dependencies, xunittestpkg.GetMainLib())
-	maintest.Dependencies = append(maintest.Dependencies, xentrypkg.GetMainLib())
-	maintest.Dependencies = append(maintest.Dependencies, xbasepkg.GetMainLib())
+	// 'cp2p' unittest project
+	maintest := denv.SetupDefaultCppTestProject("cp2p_test", "github.com\\jurgen-kluft\\cp2p")
+	maintest.Dependencies = append(maintest.Dependencies, cunittestpkg.GetMainLib())
+	maintest.Dependencies = append(maintest.Dependencies, entrypkg.GetMainLib())
+	maintest.Dependencies = append(maintest.Dependencies, basepkg.GetMainLib())
 	maintest.Dependencies = append(maintest.Dependencies, mainlib)
 
 	mainpkg.AddMainLib(mainlib)
