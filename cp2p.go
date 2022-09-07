@@ -6,5 +6,6 @@ import (
 )
 
 func main() {
+	ccode.Init()
 	ccode.Generate(cp2p.GetPackage())
 }
