@@ -1,10 +1,10 @@
 package cp2p
 
 import (
-	"github.com/jurgen-kluft/cbase/package"
+	cbase "github.com/jurgen-kluft/cbase/package"
 	"github.com/jurgen-kluft/ccode/denv"
-	"github.com/jurgen-kluft/centry/package"
-	"github.com/jurgen-kluft/cunittest/package"
+	centry "github.com/jurgen-kluft/centry/package"
+	cunittest "github.com/jurgen-kluft/cunittest/package"
 )
 
 // GetPackage returns the package object of 'cp2p'
@@ -21,14 +21,14 @@ func GetPackage() *denv.Package {
 	mainpkg.AddPackage(basepkg)
 
 	// 'cp2p' library
-	mainlib := denv.SetupDefaultCppLibProject("cp2p", "github.com\\jurgen-kluft\\cp2p")
-	mainlib.Dependencies = append(mainlib.Dependencies, basepkg.GetMainLib())
+	mainlib := denv.SetupCppLibProject("cp2p", "github.com\\jurgen-kluft\\cp2p")
+	mainlib.AddDependencies(basepkg.GetMainLib()...)
 
 	// 'cp2p' unittest project
 	maintest := denv.SetupDefaultCppTestProject("cp2p_test", "github.com\\jurgen-kluft\\cp2p")
-	maintest.Dependencies = append(maintest.Dependencies, cunittestpkg.GetMainLib())
-	maintest.Dependencies = append(maintest.Dependencies, entrypkg.GetMainLib())
-	maintest.Dependencies = append(maintest.Dependencies, basepkg.GetMainLib())
+	maintest.AddDependencies(cunittestpkg.GetMainLib()...)
+	maintest.AddDependencies(entrypkg.GetMainLib()...)
+	maintest.AddDependencies(basepkg.GetMainLib()...)
 	maintest.Dependencies = append(maintest.Dependencies, mainlib)
 
 	mainpkg.AddMainLib(mainlib)
