@@ -1,5 +1,3 @@
-
-
 P2P NODE
 - Zer0 copy messaging (send and receive)
 - Event loop (no threading)
