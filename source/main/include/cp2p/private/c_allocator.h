@@ -1,18 +1,15 @@
-//==============================================================================
-//  x_allocator.h
-//==============================================================================
-#ifndef __XPEER_2_PEER_ALLOCATOR_H__
-#define __XPEER_2_PEER_ALLOCATOR_H__
-#include "xbase/x_target.h"
-#ifdef USE_PRAGMA_ONCE 
-#pragma once 
+#ifndef __CPEER_2_PEER_ALLOCATOR_H__
+#define __CPEER_2_PEER_ALLOCATOR_H__
+#include "ccore/c_target.h"
+#ifdef USE_PRAGMA_ONCE
+#pragma once
 #endif
 
-#include "xp2p/x_types.h"
+#include "cp2p/c_types.h"
 
-namespace xcore
+namespace ncore
 {
-	namespace xp2p
+	namespace np2p
 	{
 		class allocator
 		{
@@ -23,4 +20,4 @@ namespace xcore
 	}
 }
 
-#endif	///< __XPEER_2_PEER_ALLOCATOR_H__
+#endif	// __CPEER_2_PEER_ALLOCATOR_H__

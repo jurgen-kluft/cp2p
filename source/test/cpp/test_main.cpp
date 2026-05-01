@@ -1,6 +1,6 @@
-#include "xbase/x_base.h"
-#include "xbase/x_allocator.h"
-#include "xbase/x_console.h"
+#include "cbase/c_base.h"
+#include "cbase/c_allocator.h"
+#include "cbase/c_console.h"
 
 #include "xunittest/xunittest.h"
 #include "xunittest/private\ut_ReportAssert.h"
@@ -10,7 +10,7 @@ UNITTEST_SUITE_LIST(xP2PUnitTest);
 UNITTEST_SUITE_DECLARE(xP2PUnitTest, msg);
 UNITTEST_SUITE_DECLARE(xP2PUnitTest, p2p);
 
-namespace xcore
+namespace ncore
 {
 	// Our own assert handler
 	class UnitTestAssertHandler : public xcore::x_asserthandler
@@ -59,7 +59,7 @@ namespace xcore
 		{
 			if (mem==NULL)
 				return allocate(size, alignment);
-			else 
+			else
 				return mAllocator->reallocate(mem, size, alignment);
 		}
 
@@ -91,7 +91,7 @@ bool gRunUnitTest(UnitTest::TestReporter& reporter)
 	xcore::x_iallocator* systemAllocator = xcore::x_iallocator::default();
 	xcore::UnitTestAllocator unittestAllocator( systemAllocator );
 	UnitTest::SetAllocator(&unittestAllocator);
-	
+
 	xcore::xconsole::write("Configuration: ");
 	xcore::xconsole::writeLine(TARGET_FULL_DESCR_STR);
 
