@@ -20,33 +20,23 @@ namespace ncore
         // Wire structures (little-endian on the wire)
         // ============================================================
 
-        struct object_info_t
-        {
-            u16 m_msg_id;
-            u16 m_object_index;
-            u16 m_object_gen;
-            u16 m_block_size;
-            u32 m_object_size;
-        };
-
+        // message type can be encoded in UDT message header
         struct object_data_t
         {
-            u16 m_msg_id;
-            u16 m_object_index;
-            u16 m_object_gen;
+            u8  m_object_index;
+            u8  m_object_gen;
             u16 m_block_idx;
-            u16 m_block_len;
-            u16 m_reserved0;
-            u32 m_hash32;
+            u32 m_object_size;
+            u32 m_hash;
         };
 
+        // message type can be encoded in UDT message header
         struct object_ack_t
         {
-            u16 m_msg_id;
-            u16 m_object_index;
-            u16 m_object_gen;
-            u8  m_symbol_rb[2];
+            u8  m_object_index;
+            u8  m_object_gen;
             u16 m_block_start;
+            u8  m_symbol_rb[2];
             u16 m_ack_len;
             // Followed by SRLEN-compressed bitmap payload
         };

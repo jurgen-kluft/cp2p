@@ -36,10 +36,14 @@ const (
 // ============================================================
 
 type PipeStats struct {
-	PacketsIn  u64 `json:"packets_in"`
-	PacketsOut u64 `json:"packets_out"`
-	Dropped    u64 `json:"dropped"`
-	Reordered  u64 `json:"reordered"`
+	PacketsIn               u64 `json:"packets_in"`
+	PacketsOut              u64 `json:"packets_out"`
+	DroppedObjectInfo       u64 `json:"dropped_object_info"`
+	DroppedObjectData       u64 `json:"dropped_object_data"`
+	DroppedObjectAck        u64 `json:"dropped_object_ack"`
+	DroppedObjectAckConfirm u64 `json:"dropped_object_ack_confirm"`
+	DroppedUnknown          u64 `json:"dropped_unknown"`
+	Reordered               u64 `json:"reordered"`
 }
 
 type RxStats struct {
@@ -58,6 +62,7 @@ type TxStats struct {
 	DataSent       u64 `json:"data_packets_sent"`
 	Retransmits    u64 `json:"retransmits"`
 	AcksReceived   u64 `json:"acks_received"`
+	AckBlocks      u64 `json:"ack_blocks_received"`
 	AcksTimeout    u64 `json:"acks_timeout"`
 
 	MaxInFlight   u16 `json:"max_in_flight"`
@@ -104,6 +109,7 @@ type objectData struct {
 	ObjectGen   u16
 	BlockIdx    u16
 	BlockLen    u16
+	AckReqLevel u16
 	Hash32      u32
 }
 
@@ -122,13 +128,6 @@ const (
 	TXSTATESENDING
 	TXSTATEAWAITINGACK
 	TXSTATECONFIRMED
-)
-
-type rxAckState u8
-
-const (
-	rxAckStateClean rxAckState = iota
-	rxAckStatePending
 )
 
 func encodeObjectInfo(objectIndex, objectGen u16, objectSize u32, blockSize u16) []u8 {
@@ -156,20 +155,21 @@ func decodeObjectInfo(buf []u8) (objectInfo, bool) {
 	}, true
 }
 
-func encodeObjectData(objectIndex, objectGen, blockIdx u16, payload []u8) []u8 {
-	buf := make([]u8, 14+len(payload))
+func encodeObjectData(objectIndex, objectGen, blockIdx, ackReqLevel u16, payload []u8) []u8 {
+	buf := make([]u8, 16+len(payload))
 	binary.LittleEndian.PutUint16(buf[0:], MSG_OBJECT_DATA)
 	binary.LittleEndian.PutUint16(buf[2:], objectIndex)
 	binary.LittleEndian.PutUint16(buf[4:], objectGen)
 	binary.LittleEndian.PutUint16(buf[6:], blockIdx)
 	binary.LittleEndian.PutUint16(buf[8:], u16(len(payload)))
-	binary.LittleEndian.PutUint32(buf[10:], hash32(payload))
-	copy(buf[14:], payload)
+	binary.LittleEndian.PutUint16(buf[10:], ackReqLevel)
+	binary.LittleEndian.PutUint32(buf[12:], hash32(payload))
+	copy(buf[16:], payload)
 	return buf
 }
 
 func decodeObjectData(buf []u8) (objectData, []u8, bool) {
-	if len(buf) < 14 {
+	if len(buf) < 16 {
 		return objectData{}, nil, false
 	}
 	if binary.LittleEndian.Uint16(buf[0:2]) != MSG_OBJECT_DATA {
@@ -180,35 +180,38 @@ func decodeObjectData(buf []u8) (objectData, []u8, bool) {
 		ObjectGen:   binary.LittleEndian.Uint16(buf[4:6]),
 		BlockIdx:    binary.LittleEndian.Uint16(buf[6:8]),
 		BlockLen:    binary.LittleEndian.Uint16(buf[8:10]),
-		Hash32:      binary.LittleEndian.Uint32(buf[10:14]),
+		AckReqLevel: binary.LittleEndian.Uint16(buf[10:12]),
+		Hash32:      binary.LittleEndian.Uint32(buf[12:16]),
 	}
-	if int(14+msg.BlockLen) > len(buf) {
+	if int(16+msg.BlockLen) > len(buf) {
 		return objectData{}, nil, false
 	}
-	return msg, buf[14 : 14+msg.BlockLen], true
+	return msg, buf[16 : 16+msg.BlockLen], true
 }
 
-func encodeAck(objectIndex, objectGen u16, prefix i32, bitmap []u8) []u8 {
-	ack := make([]u8, 8+len(bitmap))
+func encodeAck(objectIndex, objectGen, ackLevel u16, prefix i32, bitmap []u8) []u8 {
+	ack := make([]u8, 10+len(bitmap))
 	binary.LittleEndian.PutUint16(ack[0:], MSG_OBJECT_ACK)
 	binary.LittleEndian.PutUint16(ack[2:], objectIndex)
 	binary.LittleEndian.PutUint16(ack[4:], objectGen)
 	binary.LittleEndian.PutUint16(ack[6:], u16(prefix))
-	copy(ack[8:], bitmap)
+	binary.LittleEndian.PutUint16(ack[8:], ackLevel)
+	copy(ack[10:], bitmap)
 	return ack
 }
 
-func decodeAck(buf []u8) (u16, u16, u16, []u8, bool) {
-	if len(buf) < 8 {
-		return 0, 0, 0, nil, false
+func decodeAck(buf []u8) (u16, u16, u16, u16, []u8, bool) {
+	if len(buf) < 10 {
+		return 0, 0, 0, 0, nil, false
 	}
 	if binary.LittleEndian.Uint16(buf[0:2]) != MSG_OBJECT_ACK {
-		return 0, 0, 0, nil, false
+		return 0, 0, 0, 0, nil, false
 	}
 	objIdx := binary.LittleEndian.Uint16(buf[2:4])
 	objGen := binary.LittleEndian.Uint16(buf[4:6])
 	prefix := binary.LittleEndian.Uint16(buf[6:8])
-	return objIdx, objGen, prefix, buf[8:], true
+	ackLevel := binary.LittleEndian.Uint16(buf[8:10])
+	return objIdx, objGen, ackLevel, prefix, buf[10:], true
 }
 
 func encodeAckConfirm(objectIndex, objectGen u16) []u8 {
@@ -280,18 +283,16 @@ func hash32(data []u8) u32 {
 // ============================================================
 
 type rxCtx struct {
-	ObjectGen       u16
-	ObjectSize      u32
-	BlockSize       u16
-	NumBlocks       i32
-	Data            []u8
-	Bitmap          []u8
-	BlocksReceived  u16
-	PacketsSinceAck u16
-	AckCount        u16
-	LastAckMs       u32
-	AckState        rxAckState
-	State           rxState
+	ObjectGen         u16
+	ObjectSize        u32
+	BlockSize         u16
+	NumBlocks         i32
+	Data              []u8
+	Bitmap            []u8
+	BlocksReceived    u16
+	LastAckLevelSent  u16
+	HighestAckReqSeen u16
+	State             rxState
 }
 
 type rx struct {
@@ -331,7 +332,7 @@ func (r *rx) onObjectInfo(info objectInfo) {
 	slot.State = RXSTATERECEIVING
 }
 
-func (r *rx) onObjectData(msg objectData, payload []u8) {
+func (r *rx) onObjectData(msg objectData, payload []u8) (bool, u16) {
 
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -339,24 +340,34 @@ func (r *rx) onObjectData(msg objectData, payload []u8) {
 	r.stats.DataPackets++
 
 	slot := &r.slots[msg.ObjectIndex&0xff]
-	if slot.State == RXSTATECOMPLETEDAWAITCONFIRM {
-		// Completed objects ACK on heartbeat; do not re-arm per duplicate.
-		return
+	if slot.State == RXSTATEIDLE || slot.ObjectGen != msg.ObjectGen {
+		return false, 0
 	}
 
-	if slot.State != RXSTATERECEIVING || slot.ObjectGen != msg.ObjectGen {
-		return
+	ackTriggered := false
+	if msg.AckReqLevel > slot.LastAckLevelSent {
+		slot.HighestAckReqSeen = msg.AckReqLevel
+		slot.LastAckLevelSent = msg.AckReqLevel
+		ackTriggered = true
+	}
+
+	if slot.State == RXSTATECOMPLETEDAWAITCONFIRM {
+		return ackTriggered, slot.LastAckLevelSent
+	}
+
+	if slot.State != RXSTATERECEIVING {
+		return ackTriggered, slot.LastAckLevelSent
 	}
 	if msg.BlockIdx >= u16(slot.NumBlocks) {
-		return
+		return ackTriggered, slot.LastAckLevelSent
 	}
 	if bitmapTest(slot.Bitmap, msg.BlockIdx) {
 		r.stats.DuplicateBlocks++
-		return
+		return ackTriggered, slot.LastAckLevelSent
 	}
 	if hash32(payload) != msg.Hash32 {
 		r.stats.HashFailures++
-		return
+		return ackTriggered, slot.LastAckLevelSent
 	}
 
 	offset := int(msg.BlockIdx) * int(slot.BlockSize)
@@ -364,8 +375,6 @@ func (r *rx) onObjectData(msg objectData, payload []u8) {
 
 	bitmapSet(slot.Bitmap, msg.BlockIdx)
 	slot.BlocksReceived++
-	slot.AckState = rxAckStatePending
-	slot.PacketsSinceAck++
 
 	r.stats.ValidBlocks++
 
@@ -374,6 +383,8 @@ func (r *rx) onObjectData(msg objectData, payload []u8) {
 		fmt.Println("Object completed:", msg.ObjectIndex, "gen", msg.ObjectGen)
 		slot.State = RXSTATECOMPLETEDAWAITCONFIRM
 	}
+
+	return ackTriggered, slot.LastAckLevelSent
 }
 
 func (r *rx) onAckConfirm(objectIndex, objectGen u16) {
@@ -386,35 +397,13 @@ func (r *rx) onAckConfirm(objectIndex, objectGen u16) {
 	}
 }
 
-const COMPLETED_ACK_HEARTBEAT_MS u32 = 20
-
-func (r *rx) maybeMakeAck(objectIndex, objectGen u16, nowMs u32, ackEvery u16, ackIntervalMs u32) ([]u8, bool) {
+func (r *rx) makeAck(objectIndex, objectGen, ackLevel u16) ([]u8, bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
 	slot := &r.slots[objectIndex&0xff]
 	if slot.State == RXSTATEIDLE || slot.ObjectGen != objectGen {
 		return nil, false
-	}
-	receivingHeartbeatDue := slot.State == RXSTATERECEIVING && ackIntervalMs > 0 && slot.BlocksReceived > 0 && (nowMs-slot.LastAckMs) >= ackIntervalMs
-	completedHeartbeatDue := slot.State == RXSTATECOMPLETEDAWAITCONFIRM && (nowMs-slot.LastAckMs) >= COMPLETED_ACK_HEARTBEAT_MS
-	if slot.AckState != rxAckStatePending && !receivingHeartbeatDue && !completedHeartbeatDue {
-		return nil, false
-	}
-
-	dueToFirst := slot.AckState == rxAckStatePending && slot.AckCount == 0
-	dueToCount := slot.AckState == rxAckStatePending && ackEvery > 0 && slot.PacketsSinceAck >= ackEvery
-	dueToTime := slot.AckState == rxAckStatePending && ackIntervalMs > 0 && slot.PacketsSinceAck > 0 && (nowMs-slot.LastAckMs) >= ackIntervalMs
-	dueToComplete := slot.State == RXSTATECOMPLETEDAWAITCONFIRM && slot.AckState == rxAckStatePending
-	dueToReceivingHeartbeat := receivingHeartbeatDue
-	dueToCompletedHeartbeat := completedHeartbeatDue
-
-	if !dueToFirst && !dueToCount && !dueToTime && !dueToComplete && !dueToReceivingHeartbeat && !dueToCompletedHeartbeat {
-		return nil, false
-	}
-	coalesced := u16(0)
-	if slot.AckState == rxAckStatePending {
-		coalesced = slot.PacketsSinceAck
 	}
 
 	// Build bitmap ACK from current receiver state so duplicates can still be acknowledged.
@@ -430,35 +419,18 @@ func (r *rx) maybeMakeAck(objectIndex, objectGen u16, nowMs u32, ackEvery u16, a
 	}
 
 	ackBitmapBytes := (nBits + 7) / 8
-	ackLen := 8 + int(ackBitmapBytes)
-	ack := make([]u8, ackLen)
-
-	binary.LittleEndian.PutUint16(ack[0:], MSG_OBJECT_ACK)
-	binary.LittleEndian.PutUint16(ack[2:], objectIndex)
-	binary.LittleEndian.PutUint16(ack[4:], objectGen)
-	binary.LittleEndian.PutUint16(ack[6:], u16(prefix))
-
+	ackBitmap := make([]u8, ackBitmapBytes)
 	for i := i32(0); i < nBits; i++ {
 		if bitmapTest(slot.Bitmap, u16(prefix+i)) {
-			ack[8+(i>>3)] |= 1 << (i & 7)
+			ackBitmap[i>>3] |= 1 << (i & 7)
 		}
 	}
 
-	if slot.AckState == rxAckStatePending {
-		slot.AckState = rxAckStateClean
-		slot.PacketsSinceAck = 0
-	}
-	slot.AckCount++
-	slot.LastAckMs = nowMs
 	r.stats.AckPacketsSent++
-	if coalesced > 1 {
-		r.stats.AckCoalesced += u64(coalesced - 1)
-	}
-
-	return ack, true
+	return encodeAck(objectIndex, objectGen, ackLevel, prefix, ackBitmap), true
 }
 
-func (r *rx) step(pktData []u8, nowMs u32, ackEvery u16, ackIntervalMs u32) ([]u8, bool) {
+func (r *rx) step(pktData []u8, nowMs u32) ([]u8, bool) {
 	if len(pktData) < 2 {
 		return nil, false
 	}
@@ -482,8 +454,11 @@ func (r *rx) step(pktData []u8, nowMs u32, ackEvery u16, ackIntervalMs u32) ([]u
 		if !ok {
 			return nil, false
 		}
-		r.onObjectData(msg, payload)
-		return r.maybeMakeAck(msg.ObjectIndex, msg.ObjectGen, nowMs, ackEvery, ackIntervalMs)
+		ackTriggered, ackLevel := r.onObjectData(msg, payload)
+		if !ackTriggered {
+			return nil, false
+		}
+		return r.makeAck(msg.ObjectIndex, msg.ObjectGen, ackLevel)
 	}
 
 	return nil, false
@@ -512,20 +487,33 @@ type tx struct {
 	AckTimeoutMs   u32
 	LastProgressMs u32
 
-	InfoTxCount  u32 // NEW: count how many times OBJECT_INFO was sent
-	LastInfoTxMs u32 // NEW: last time OBJECT_INFO was sent
-	NextSendIdx  u16
+	InfoTxCount    u32 // NEW: count how many times OBJECT_INFO was sent
+	LastInfoTxMs   u32 // NEW: last time OBJECT_INFO was sent
+	NextSendIdx    u16
+	AckReqLevel    u16
+	AckLevelK      u16
+	SentSinceBump  u16
+	EstimatedRttMs u32
+	AckLevelSentAt map[u16]u32
+
+	InResendRounds   bool
+	LastRoundAcked   u16
+	NoProgressRounds u16
+	WaitUntilMs      u32
 
 	stats *TxStats
 }
 
 const INFO_RESEND_MS u32 = 20
+const DEFAULT_ACK_LEVEL_K u16 = 4
+const RESEND_WAIT_MAX_MS u32 = 40
 
 func newTx(stats *TxStats) *tx {
 	return &tx{
 		MinInflight:  1,
 		MaxInflight:  16,
 		AckTimeoutMs: 50,
+		AckLevelK:    DEFAULT_ACK_LEVEL_K,
 		stats:        stats,
 	}
 }
@@ -547,6 +535,24 @@ func (t *tx) start(index, gen u16, data []u8, blockSize u16) {
 	t.InfoTxCount = 0
 	t.LastInfoTxMs = 0
 	t.NextSendIdx = 0
+	t.AckReqLevel = 1
+	t.SentSinceBump = 0
+	t.EstimatedRttMs = 0
+	t.AckLevelSentAt = make(map[u16]u32)
+	t.InResendRounds = false
+	t.LastRoundAcked = 0
+	t.NoProgressRounds = 0
+	t.WaitUntilMs = 0
+}
+
+func (t *tx) bumpAckReqLevel(now u32) {
+	t.AckReqLevel++
+	if t.AckLevelSentAt == nil {
+		t.AckLevelSentAt = make(map[u16]u32)
+	}
+	if _, exists := t.AckLevelSentAt[t.AckReqLevel]; !exists {
+		t.AckLevelSentAt[t.AckReqLevel] = now
+	}
 }
 
 func (t *tx) isFullyAcked() bool {
@@ -563,11 +569,11 @@ func (t *tx) onAck(blockIdx u16, nowMs u32) {
 	}
 	bitmapSet(t.AckBitmap, blockIdx)
 	t.AckedBlocks++
+	t.stats.AckBlocks++
 	if t.InFlight > 0 {
 		t.InFlight--
 	}
 	t.LastProgressMs = nowMs
-	t.stats.AcksReceived++
 
 	if t.InflightLimit < t.MaxInflight {
 		t.InflightLimit++
@@ -614,29 +620,102 @@ func (t *tx) maybeSendInfo(now u32, p *pipe) {
 	}
 }
 
+func (t *tx) allSentOnce() bool {
+	for i := u16(0); i < t.NumBlocks; i++ {
+		if bitmapTest(t.AckBitmap, i) {
+			continue
+		}
+		if !t.sentOnce(i) {
+			return false
+		}
+	}
+	return true
+}
+
+func (t *tx) roundStartWaitMs(unacked u16) u32 {
+	if unacked == 0 {
+		return 0
+	}
+
+	if unacked < t.AckLevelK {
+		waitMs := t.EstimatedRttMs
+		if waitMs == 0 {
+			waitMs = t.AckTimeoutMs / 2
+		}
+		if waitMs < 5 {
+			waitMs = 5
+		}
+		if waitMs > t.AckTimeoutMs {
+			waitMs = t.AckTimeoutMs
+		}
+		return waitMs
+	}
+
+	waitMs := u32(5 + int(t.NoProgressRounds)*5)
+	if waitMs > RESEND_WAIT_MAX_MS {
+		waitMs = RESEND_WAIT_MAX_MS
+	}
+	return waitMs
+}
+
+func (t *tx) onResendRoundEnd(now u32) {
+	unacked := t.NumBlocks - t.AckedBlocks
+	if unacked == 0 {
+		return
+	}
+
+	if t.AckedBlocks == t.LastRoundAcked {
+		t.NoProgressRounds++
+	} else {
+		t.NoProgressRounds = 0
+	}
+
+	t.WaitUntilMs = now + t.roundStartWaitMs(unacked)
+	t.LastRoundAcked = t.AckedBlocks
+}
+
 func (t *tx) maybeSendData(now u32, forceRetransmit bool, p *pipe) bool {
 	if t.isFullyAcked() {
+		return false
+	}
+	if now < t.WaitUntilMs {
 		return false
 	}
 
 	var sendIdx u16
 	haveSend := false
-	allowNew := t.InFlight < t.InflightLimit
-	allowRetransmit := t.InFlight < t.InflightLimit || forceRetransmit
+	allSent := t.allSentOnce()
 
-	for n := u16(0); n < t.NumBlocks; n++ {
-		i := (t.NextSendIdx + n) % t.NumBlocks
-		if bitmapTest(t.AckBitmap, i) {
-			continue
+	if !allSent {
+		for n := u16(0); n < t.NumBlocks; n++ {
+			i := (t.NextSendIdx + n) % t.NumBlocks
+			if bitmapTest(t.AckBitmap, i) {
+				continue
+			}
+			if !t.sentOnce(i) {
+				sendIdx = i
+				haveSend = true
+				break
+			}
 		}
-
-		if !t.sentOnce(i) && allowNew {
-			sendIdx = i
-			haveSend = true
-			break
+	} else {
+		if !t.InResendRounds {
+			t.InResendRounds = true
+			t.LastRoundAcked = t.AckedBlocks
+			unacked := t.NumBlocks - t.AckedBlocks
+			if unacked < t.AckLevelK {
+				t.WaitUntilMs = now + t.roundStartWaitMs(unacked)
+				return false
+			}
 		}
-
-		if t.sentOnce(i) && allowRetransmit {
+		if !forceRetransmit && t.NoProgressRounds > 0 && t.InFlight > 0 {
+			return false
+		}
+		for n := u16(0); n < t.NumBlocks; n++ {
+			i := (t.NextSendIdx + n) % t.NumBlocks
+			if bitmapTest(t.AckBitmap, i) {
+				continue
+			}
 			sendIdx = i
 			haveSend = true
 			break
@@ -658,6 +737,17 @@ func (t *tx) maybeSendData(now u32, forceRetransmit bool, p *pipe) bool {
 		}
 	}
 	t.NextSendIdx = (sendIdx + 1) % t.NumBlocks
+	if t.InResendRounds && t.NextSendIdx == 0 {
+		t.onResendRoundEnd(now)
+	}
+	t.SentSinceBump++
+	if t.AckLevelK == 0 {
+		t.AckLevelK = 1
+	}
+	if t.SentSinceBump >= t.AckLevelK {
+		t.bumpAckReqLevel(now)
+		t.SentSinceBump = 0
+	}
 
 	t.stats.DataSent++
 
@@ -668,7 +758,7 @@ func (t *tx) maybeSendData(now u32, forceRetransmit bool, p *pipe) bool {
 	}
 
 	payload := t.Data[offset:end]
-	p.sendA2B(packet{encodeObjectData(t.ObjectIndex, t.ObjectGen, sendIdx, payload)})
+	p.sendA2B(packet{encodeObjectData(t.ObjectIndex, t.ObjectGen, sendIdx, t.AckReqLevel, payload)})
 	return true
 }
 
@@ -694,7 +784,28 @@ func (t *tx) stepTick(now u32, p *pipe) {
 	t.State = TXSTATESENDING
 }
 
-func (t *tx) stepOnAck(prefix u16, ackBitmap []u8, now u32) {
+func (t *tx) stepOnAck(ackLevel, prefix u16, ackBitmap []u8, now u32) {
+	t.stats.AcksReceived++
+	if ackLevel > 0 {
+		if sentAt, ok := t.AckLevelSentAt[ackLevel]; ok {
+			if now >= sentAt {
+				sample := now - sentAt
+				if sample > 0 {
+					if t.EstimatedRttMs == 0 {
+						t.EstimatedRttMs = sample
+					} else {
+						t.EstimatedRttMs = (7*t.EstimatedRttMs + sample) / 8
+					}
+				}
+			}
+		}
+		for level := range t.AckLevelSentAt {
+			if level <= ackLevel {
+				delete(t.AckLevelSentAt, level)
+			}
+		}
+		t.NoProgressRounds = 0
+	}
 	t.onAckBitmap(prefix, ackBitmap, now)
 	if t.isFullyAcked() {
 		t.State = TXSTATEAWAITINGACK
@@ -754,14 +865,37 @@ func (p *pipe) sendB2A(pkt packet) {
 	p.trySend(p.b2aSend, pkt)
 }
 
+func packetType(pkt packet) u16 {
+	if len(pkt.Data) < 2 {
+		return 0
+	}
+	return binary.LittleEndian.Uint16(pkt.Data[0:2])
+}
+
+func (p *pipe) countDrop(pkt packet) {
+	switch packetType(pkt) {
+	case MSG_OBJECT_INFO:
+		p.stats.DroppedObjectInfo++
+	case MSG_OBJECT_DATA:
+		p.stats.DroppedObjectData++
+	case MSG_OBJECT_ACK:
+		p.stats.DroppedObjectAck++
+	case MSG_OBJECT_ACK_CONFIRM:
+		p.stats.DroppedObjectAckConfirm++
+	default:
+		p.stats.DroppedUnknown++
+	}
+}
+
 func (p *pipe) run(in, out chan packet) {
 	for pkt := range in {
 		p.stats.PacketsIn++
 
 		if rand.Float64() < p.drop {
-			p.stats.Dropped++
+			p.countDrop(pkt)
 			continue
 		}
+
 		time.Sleep(time.Duration(p.latMs+rand.Intn(p.jitMs+1)) * time.Millisecond)
 
 		if rand.Float64() < p.reorder {
@@ -797,23 +931,17 @@ func main() {
 	var drop, reorder float64
 	var lat, jit int
 	var seed int64
-	var ackEvery int
-	var ackInterval int
+	var ackLevelK int
 
 	flag.Float64Var(&drop, "drop", 0, "drop probability")
 	flag.Float64Var(&reorder, "reorder", 0, "reorder probability")
 	flag.IntVar(&lat, "latency", 0, "latency ms")
 	flag.IntVar(&jit, "jitter", 0, "jitter ms")
 	flag.Int64Var(&seed, "seed", 1, "rng seed")
-	flag.IntVar(&ackEvery, "ack-every", 4, "send ACK every N received data packets per object")
-	flag.IntVar(&ackInterval, "ack-interval", 5, "send ACK at least every N ms when data was received")
+	flag.IntVar(&ackLevelK, "ack-level-k", int(DEFAULT_ACK_LEVEL_K), "bump ack_req_level every K sent OBJECT_DATA packets")
 	flag.Parse()
-
-	if ackEvery < 1 {
-		ackEvery = 1
-	}
-	if ackInterval < 0 {
-		ackInterval = 0
+	if ackLevelK < 1 {
+		ackLevelK = 1
 	}
 
 	rand.Seed(seed)
@@ -832,6 +960,7 @@ func main() {
 			data[j] = u8(i ^ j)
 		}
 		t := newTx(&stats.Tx)
+		t.AckLevelK = u16(ackLevelK)
 		t.start(u16(i), 1, data, 256)
 		txs[i] = t
 	}
@@ -850,12 +979,12 @@ func main() {
 
 			select {
 			case pkt := <-p.a2b:
-				if ack, ok := r.step(pkt.Data, now, u16(ackEvery), u32(ackInterval)); ok {
+				if ack, ok := r.step(pkt.Data, now); ok {
 					p.sendB2A(packet{ack})
 				}
 
 			case pkt := <-p.b2a:
-				objIdx, objGen, prefix, ackBitmap, ok := decodeAck(pkt.Data)
+				objIdx, objGen, ackLevel, prefix, ackBitmap, ok := decodeAck(pkt.Data)
 				if !ok {
 					break
 				}
@@ -865,7 +994,7 @@ func main() {
 					break
 				}
 
-				t.stepOnAck(prefix, ackBitmap, now)
+				t.stepOnAck(ackLevel, prefix, ackBitmap, now)
 
 			default:
 				handled = false

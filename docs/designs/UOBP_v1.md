@@ -53,46 +53,35 @@ num_blocks = ceil(object_size / block_size)
 
 All messages are carried directly in UDP payloads.
 
-### 4.1 Object Start (`udp_obj_info_t`)
-
-```c
-struct udp_obj_info_t
-{
-    u16 m_msg_id;        // OBJECT_INFO
-    u16 m_object_index;
-    u16 m_object_gen;
-    u32 m_object_size;   // total bytes
-    u16 m_block_size;    // fixed block size in bytes
-};
-```
+### 4.1 Object Data (`udp_obj_msg_t`)
 
 **Receiver behavior:**
-- Request object memory and bitmap memory from the user layer
-- Zero‑initialize the received‑block bitmap before accepting data
-- Discard any previous object state with lower generation
+
+- Only if object hasn't been initialized yet, use 'object index', 'object gen', 'block count', and 'block size' to:
+  - Request object memory and bitmap memory from the user layer
+  - Zero‑initialize the received‑block bitmap before accepting data
+  - Discard any previous object state with lower generation
 
 If memory allocation for either the object buffer or bitmap fails, the receiver **MUST silently reject** the object and **MUST NOT emit ACKs** for it.
 
----
-
-### 4.2 Object Data (`udp_obj_msg_t`)
 
 ```c
 struct udp_obj_msg_t
 {
-    u16 m_msg_id;        // OBJECT_DATA
-    u16 m_object_index;
-    u16 m_object_gen;
-    u16 m_block_idx;     // zero‑based
+    u8  m_object_index;  // (bit 7 = 1) OBJECT_DATA
+    u8  m_object_gen;    // generation of the object being built
+    u16 m_block_count;   // zero‑based, total number of blocks in object
+    u16 m_block_idx;     // zero‑based, block index of this payload
+    u16 m_block_size;    // fixed block size in bytes (same as OBJECT_INFO)
     u16 m_block_len;     // payload length in bytes
-    u32 m_xxhash32;      // xxHash32 of payload (little‑endian)
+    u16 m_hash;          // hash of payload (little‑endian)
     // u8 payload[m_block_len]
 };
 ```
 
 **Receiver behavior:**
 - Validate object existence and generation
-- Recompute and validate `xxHash32` over the payload
+- Recompute and validate `hash` over the payload
 - On hash mismatch: discard the block and do **not** mark it received
 - Copy payload directly into user memory at:
 
@@ -105,17 +94,17 @@ offset = m_block_idx * block_size
 
 ---
 
-### 4.3 Object Acknowledgment (`udp_obj_ack_t`)
+### 4.2 Object Acknowledgment (`udp_obj_ack_t`)
 
 ```c
 struct udp_obj_ack_t
 {
-    u16 m_msg_id;        // OBJECT_ACK
-    u16 m_object_index;
-    u16 m_object_gen;
-    u8  m_symbol_rb[2];  // SRLEN run‑bits for 0 and 1
-    u16 m_block_start;   // starting block index
-    u16 m_ack_len;       // length of ack data in bytes
+    u8  m_object_index;   // (bit 7 = 0) OBJECT_ACK
+    u8  m_object_gen;     // generation of the object being built
+    u8  m_symbol_rb[2];   // SRLEN run‑bits for 0 and 1
+    u16 m_block_start;    // starting block index
+    u16 m_ack_req_level;  // ACK request level
+    u16 m_ack_len;        // length of compressed ack data in bytes
     // u8 m_ack_data[];   // SRLEN‑compressed bitmap
 };
 ```
@@ -171,7 +160,7 @@ Completion detection is implicit when the ACK bitmap resolves all bits to `1`.
 
 ## 9. Timing and Flow Control
 
-- Receivers **SHOULD** emit ACKs periodically or after `N` newly validated blocks
+- Receivers **SHOULD** emits an ACK for every unique 'ack req level' value
 - ACK frequency is an implementation detail and **MUST NOT** be relied upon
 - Senders **SHOULD** limit the number of outstanding unacknowledged blocks
 
@@ -198,7 +187,7 @@ Example (`0x1234`):
 
 ### 10.3 Maximum UDP MTU
 
-- Maximum assumed UDP MTU: **1280 bytes**
+- Maximum assumed UDP MTU: **(1280+32) bytes**
 - All UDP payloads **MUST** fit within this limit
 - IP fragmentation **MUST NOT** be relied upon
 
@@ -265,9 +254,10 @@ If an object build is aborted due to timeout, restart, or generation mismatch, t
 
 ### 11.6 Per‑Block Integrity Validation
 
-Every `OBJECT_DATA` packet **MUST** include a **32‑bit xxHash (xxHash32)** of the block payload.
+Every `OBJECT_DATA` packet **MUST** include a **32‑bit hash (hash)** of the block payload.
 
 Rules:
+- The hash algorithm is implementation‑defined but **MUST** be consistent across sender and receiver
 - The hash covers only the payload bytes
 - Hash value is encoded little‑endian on the wire
 - Receiver recomputes the hash after reception
