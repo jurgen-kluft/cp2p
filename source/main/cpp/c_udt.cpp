@@ -7,6 +7,15 @@ namespace ncore
 {
     namespace nudt
     {
+        static inline u32 clamp_u32(u32 v, u32 lo, u32 hi)
+        {
+            if (v < lo)
+                return lo;
+            if (v > hi)
+                return hi;
+            return v;
+        }
+
         // -----------------------------------------------------------------------------
         // UDT CORE INVARIANTS
         // -----------------------------------------------------------------------------
@@ -127,6 +136,7 @@ namespace ncore
             config->m_rx_ack_interval        = 10000u;
             config->m_rx_nak_interval        = 300000u;
             config->m_rx_exp_interval        = 300000u;
+            config->m_rx_immediate_nak_min_interval = 10000u;
         }
 
         // -----------------------------------------------------------------------------
@@ -199,6 +209,7 @@ namespace ncore
             udt->m_rx_ack_interval   = config->m_rx_ack_interval;
             udt->m_rx_nak_interval   = config->m_rx_nak_interval;
             udt->m_rx_exp_interval   = config->m_rx_exp_interval;
+            udt->m_rx_immediate_nak_min_interval = config->m_rx_immediate_nak_min_interval;
         }
 
         u64 tx_next_tick_ts(udt_t* udt, u64 now_ts)
@@ -270,8 +281,6 @@ namespace ncore
                     packet_t pkt;
                     if (udt->m_pkt_ops->m_build_data(udt->m_user_ctx, (u32)seq, &pkt))
                     {
-                        udt->m_cc_ops->on_packet_sent(udt->m_cc_ctx, (u32)seq, now_ts);
-
                         udt->m_pkt_ops->m_send_packet(udt->m_user_ctx, &pkt);
 
                         udt->m_tx_last_send_ts = now_ts;
@@ -379,6 +388,9 @@ namespace ncore
         // -----------------------------------------------------------------------------
         void rx_tick(udt_t* udt, u64 now_ts)
         {
+            // Keep virtual NAK window state updated in scheduler path.
+            (void)rx_next_tick_ts(udt, now_ts);
+
             // ACK timer: send cumulative ACK periodically
             if ((now_ts - udt->m_rx_last_ack_sent_ts) >= udt->m_rx_ack_interval)
             {
@@ -395,7 +407,7 @@ namespace ncore
             }
 
             // NAK timer: send selective loss information if any gaps exist
-            if (udt->m_seq_ops->size(udt->m_seq_maps->m_rx_missing_map) > 0 && (now_ts - udt->m_rx_last_nak_sent_ts) >= udt->m_rx_nak_interval)
+            if ((now_ts - udt->m_rx_last_nak_sent_ts) >= udt->m_rx_nak_interval && udt->m_seq_ops->size(udt->m_seq_maps->m_rx_missing_map) > 0)
             {
                 packet_t nak_pkt;
                 if (udt->m_pkt_ops->m_build_nak(udt->m_user_ctx, udt->m_seq_maps->m_rx_missing_map, udt->m_rx_flow_window, &nak_pkt))
@@ -444,11 +456,10 @@ namespace ncore
         {
             sequence_ops_t* ops = udt->m_seq_ops;
 
-            udt->m_cc_ops->on_packet_received(udt->m_cc_ctx, seq, now_ts);
-
             if (!ops->push(udt->m_seq_maps->m_rx_received_map, seq))
             {
-                // Sequence was already present in received map
+                // Duplicate sequence; clear any stale/spurious missing marker.
+                ops->remove(udt->m_seq_maps->m_rx_missing_map, seq);
                 return;
             }
 
@@ -458,14 +469,11 @@ namespace ncore
                 // Mark missing packets in sequence map, these stay here until we receive those missing
                 // packets or they get expired by the EXP timer.
                 for (u32 s = udt->m_rx_highest_contig + 1; s < seq; ++s)
-                    ops->push(udt->m_seq_maps->m_rx_missing_map, s);
-
-                // UDT reports loss immediately on gap detection; periodic NAK is only for repeats.
-                packet_t nak_pkt;
-                if (udt->m_pkt_ops->m_build_nak(udt->m_user_ctx, udt->m_seq_maps->m_rx_missing_map, udt->m_rx_flow_window, &nak_pkt))
                 {
-                    udt->m_pkt_ops->m_send_packet(udt->m_user_ctx, &nak_pkt);
-                    udt->m_rx_last_nak_sent_ts = now_ts;
+                    if (!ops->has(udt->m_seq_maps->m_rx_received_map, s))
+                    {
+                        ops->push(udt->m_seq_maps->m_rx_missing_map, s);
+                    }
                 }
             }
 

@@ -176,6 +176,7 @@ namespace ncore
             u64 m_rx_ack_interval;  // ACK timer period
             u64 m_rx_nak_interval;  // NAK timer period
             u64 m_rx_exp_interval;  // EXP timer period (receiver expiration)
+            u64 m_rx_immediate_nak_min_interval;
         };
 
         // -----------------------------------------------------------------------------
@@ -193,6 +194,7 @@ namespace ncore
             u64 m_rx_ack_interval;
             u64 m_rx_nak_interval;
             u64 m_rx_exp_interval;
+            u64 m_rx_immediate_nak_min_interval;
         };
         void init_config(udt_config_t* config);
 

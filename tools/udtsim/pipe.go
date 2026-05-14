@@ -83,7 +83,9 @@ type MessagePipe struct {
 }
 
 func NewMessagePipe(cfg PipeConfig, disp *Dispatcher) *MessagePipe {
-	return &MessagePipe{cfg: cfg, disp: disp, rnd: rand.New(rand.NewSource(cfg.Seed))}
+	m := &MessagePipe{cfg: cfg, disp: disp, rnd: rand.New(rand.NewSource(cfg.Seed))}
+	m.queue = make([]queuedPacket, 0, cfg.MaxQueue)
+	return m
 }
 
 func (p *MessagePipe) packetSizeBytes(pkt Packet) int {

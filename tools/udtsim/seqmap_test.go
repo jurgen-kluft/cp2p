@@ -166,6 +166,76 @@ func TestSequenceMapToSlice(t *testing.T) {
 	}
 }
 
+func TestSequenceMapSearchContiguesSetInvalidRange(t *testing.T) {
+	m := NewSequenceMap(128, SeqMapLowest, 1)
+
+	if seq, ok := m.SearchContiguesSet(10, 10); ok || seq != 0 {
+		t.Fatalf("expected invalid empty range to return (0,false), got (%d,%t)", seq, ok)
+	}
+
+	if seq, ok := m.SearchContiguesSet(20, 10); ok || seq != 0 {
+		t.Fatalf("expected invalid reversed range to return (0,false), got (%d,%t)", seq, ok)
+	}
+
+	if seq, ok := m.SearchContiguesSet(0, 129); ok || seq != 0 {
+		t.Fatalf("expected out-of-range end to return (0,false), got (%d,%t)", seq, ok)
+	}
+}
+
+func TestSequenceMapSearchContiguesSetAllSet(t *testing.T) {
+	m := NewSequenceMap(128, SeqMapLowest, 1)
+	for i := uint32(5); i < 73; i++ {
+		m.Push(i)
+	}
+
+	seq, ok := m.SearchContiguesSet(5, 73)
+	if !ok || seq != 72 {
+		t.Fatalf("expected fully set range to return (72,true), got (%d,%t)", seq, ok)
+	}
+}
+
+func TestSequenceMapSearchContiguesSetGapInHeadWord(t *testing.T) {
+	m := NewSequenceMap(128, SeqMapLowest, 1)
+	for _, seq := range []uint32{5, 6, 7, 9, 10, 11} {
+		m.Push(seq)
+	}
+
+	got, ok := m.SearchContiguesSet(5, 12)
+	if !ok || got != 11 {
+		t.Fatalf("expected highest set seq 11 for partial head word, got (%d,%t)", got, ok)
+	}
+}
+
+func TestSequenceMapSearchContiguesSetGapInMiddleWord(t *testing.T) {
+	m := NewSequenceMap(192, SeqMapLowest, 1)
+	for i := uint32(8); i < 140; i++ {
+		if i == 96 {
+			continue
+		}
+		m.Push(i)
+	}
+
+	got, ok := m.SearchContiguesSet(8, 140)
+	if !ok || got != 127 {
+		t.Fatalf("expected highest set seq 127 for middle-word gap, got (%d,%t)", got, ok)
+	}
+}
+
+func TestSequenceMapSearchContiguesSetGapInTailWord(t *testing.T) {
+	m := NewSequenceMap(160, SeqMapLowest, 1)
+	for i := uint32(64); i < 100; i++ {
+		if i == 98 {
+			continue
+		}
+		m.Push(i)
+	}
+
+	got, ok := m.SearchContiguesSet(64, 100)
+	if !ok || got != 99 {
+		t.Fatalf("expected highest set seq 99 for tail-word gap, got (%d,%t)", got, ok)
+	}
+}
+
 func TestSequenceMapMergeCloneSerializeDeserialize(t *testing.T) {
 	a := NewSequenceMap(128, SeqMapLowest, 1)
 	b := NewSequenceMap(128, SeqMapLowest, 2)

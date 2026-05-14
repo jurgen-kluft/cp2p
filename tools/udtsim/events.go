@@ -15,12 +15,19 @@ const (
 	EventTxTimeout          EventKind = "TxTimeout"
 	EventTxSendData         EventKind = "TxSendData"
 	EventTxSendRetransmit   EventKind = "TxSendRetransmit"
+	EventTxCCSample         EventKind = "TxCCSample"
+	EventTxCCBlocked        EventKind = "TxCCBlocked"
+	EventTxFlowSample       EventKind = "TxFlowSample"
+	EventTxFlowBlocked      EventKind = "TxFlowBlocked"
+	EventTxFlowWindowUpdate EventKind = "TxFlowWindowUpdate"
 	EventTxAckAccepted      EventKind = "TxAckAccepted"
 	EventTxAckIgnored       EventKind = "TxAckIgnored"
 	EventTxNakReceived      EventKind = "TxNakReceived"
 	EventRxDataReceived     EventKind = "RxDataReceived"
 	EventRxGapDetected      EventKind = "RxGapDetected"
 	EventRxImmediateNakSent EventKind = "RxImmediateNakSent"
+	EventRxNakSent          EventKind = "RxNakSent"
+	EventRxNakWindowClosed  EventKind = "RxNakWindowClosed"
 	EventRxAckSent          EventKind = "RxAckSent"
 )
 
@@ -67,11 +74,11 @@ func (d *Dispatcher) OnPacketQueued(tsUs uint64, from, to, pktType string, seq u
 
 func (d *Dispatcher) OnPacketReordered(tsUs uint64, direction string, firstType string, firstSeq uint32, secondType string, secondSeq uint32) {
 	d.emit(EventPacketReordered, tsUs, map[string]any{
-		"direction": direction,
-		"first_type": firstType,
-		"first_seq": firstSeq,
+		"direction":   direction,
+		"first_type":  firstType,
+		"first_seq":   firstSeq,
 		"second_type": secondType,
-		"second_seq": secondSeq,
+		"second_seq":  secondSeq,
 	})
 }
 
@@ -93,6 +100,43 @@ func (d *Dispatcher) OnTxSendData(tsUs uint64, seq uint32) {
 
 func (d *Dispatcher) OnTxSendRetransmit(tsUs uint64, seq uint32) {
 	d.emit(EventTxSendRetransmit, tsUs, map[string]any{"seq": seq})
+}
+
+func (d *Dispatcher) OnTxCCSample(tsUs uint64, cwnd, inFlight, budget uint32, pacingUs uint64, slowStart bool) {
+	d.emit(EventTxCCSample, tsUs, map[string]any{
+		"cwnd":       cwnd,
+		"in_flight":  inFlight,
+		"budget":     budget,
+		"pacing_us":  pacingUs,
+		"slow_start": slowStart,
+	})
+}
+
+func (d *Dispatcher) OnTxCCBlocked(tsUs uint64, cwnd, inFlight uint32) {
+	d.emit(EventTxCCBlocked, tsUs, map[string]any{"cwnd": cwnd, "in_flight": inFlight})
+}
+
+func (d *Dispatcher) OnTxFlowSample(tsUs uint64, flowWindowBytes, inFlightBytes, flowBudgetBytes uint32) {
+	d.emit(EventTxFlowSample, tsUs, map[string]any{
+		"flow_window_bytes": flowWindowBytes,
+		"in_flight_bytes":   inFlightBytes,
+		"flow_budget_bytes": flowBudgetBytes,
+	})
+}
+
+func (d *Dispatcher) OnTxFlowBlocked(tsUs uint64, flowWindowBytes, inFlightBytes uint32) {
+	d.emit(EventTxFlowBlocked, tsUs, map[string]any{
+		"flow_window_bytes": flowWindowBytes,
+		"in_flight_bytes":   inFlightBytes,
+	})
+}
+
+func (d *Dispatcher) OnTxFlowWindowUpdate(tsUs uint64, prevFlowWindowBytes, newFlowWindowBytes uint32, source string) {
+	d.emit(EventTxFlowWindowUpdate, tsUs, map[string]any{
+		"prev_flow_window_bytes": prevFlowWindowBytes,
+		"new_flow_window_bytes":  newFlowWindowBytes,
+		"source":                 source,
+	})
 }
 
 func (d *Dispatcher) OnTxAckAccepted(tsUs uint64, ackSeq uint32) {
@@ -117,6 +161,19 @@ func (d *Dispatcher) OnRxGapDetected(tsUs uint64, firstMissing, until uint32) {
 
 func (d *Dispatcher) OnRxImmediateNakSent(tsUs uint64, missingCount uint32) {
 	d.emit(EventRxImmediateNakSent, tsUs, map[string]any{"missing_count": missingCount})
+}
+
+func (d *Dispatcher) OnRxNakSent(tsUs uint64, missingCount uint32, urgency uint32, intervalUs uint64) {
+	d.emit(EventRxNakSent, tsUs, map[string]any{"missing_count": missingCount, "urgency": urgency, "interval_us": intervalUs})
+}
+
+func (d *Dispatcher) OnRxNakWindowClosed(tsUs uint64, recvCount, missingCount, urgency uint32, intervalUs uint64) {
+	d.emit(EventRxNakWindowClosed, tsUs, map[string]any{
+		"recv_count":    recvCount,
+		"missing_count": missingCount,
+		"urgency":       urgency,
+		"interval_us":   intervalUs,
+	})
 }
 
 func (d *Dispatcher) OnRxAckSent(tsUs uint64, ackSeq uint32) {

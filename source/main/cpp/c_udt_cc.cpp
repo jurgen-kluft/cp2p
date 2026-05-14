@@ -94,12 +94,7 @@ namespace ncore
             ASSERT(cc != nullptr);
 
             u32 acked = 0;
-            if (cc->m_has_last_ack == 0)
-            {
-                cc->m_has_last_ack = 1;
-                acked              = 1;
-            }
-            else if (ack_seq > cc->m_last_ack_seq)
+            if (ack_seq > cc->m_last_ack_seq)
             {
                 acked = ack_seq - cc->m_last_ack_seq;
             }
@@ -118,7 +113,7 @@ namespace ncore
             if (cc->m_slow_start)
             {
                 // UDT slow start uses ACKed packets to open the window quickly.
-                const u32 new_cwnd = cc->m_cwnd + acked;
+                const u32 new_cwnd = cc->m_cwnd + acked * 2u;
                 cc->m_cwnd         = clamp_u32(new_cwnd, cc->m_min_cwnd, cc->m_max_cwnd);
 
                 if (cc->m_cwnd >= cc->m_max_cwnd)
@@ -126,7 +121,9 @@ namespace ncore
 
                 if (cc->m_pacing_interval_us > cc->m_min_pacing_interval_us)
                 {
-                    const u64 step = (acked > 64u) ? 64u : acked;
+                    u64 step = (u64)acked * 2u;
+                    if (step > 64u)
+                        step = 64u;
                     cc->m_pacing_interval_us = (cc->m_pacing_interval_us > step)
                                                  ? (cc->m_pacing_interval_us - step)
                                                  : cc->m_min_pacing_interval_us;

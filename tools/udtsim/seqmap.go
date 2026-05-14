@@ -85,6 +85,61 @@ func (m *SequenceMap) Remove(seq uint32) {
 	m.setCount--
 }
 
+// SearchContiguesSet returns the highest sequence number in the range [start, end) that is set,
+// if all sequence numbers in the range are set.
+// If not all sequence numbers are set, it returns the highest set sequence number in the range.
+func (m *SequenceMap) SearchContiguesSet(start, end uint32) (uint32, bool) {
+	if start >= end || end > m.maxSeq {
+		return 0, false
+	}
+
+	// We need to return the most upper sequence number in the range [start, end) that is set.
+	// This means we need to check if all bits in the range are set, and if not, find the highest
+	// set bit.
+
+	// Head first - check if all the bits starting from 'start & 63' are set until the end of the word.
+	w := start >> 6
+	b := start & 63
+	if b != 0 {
+		mask := ^uint64(0) << b
+		// Check if all bits from 'b' to 63 are set.
+		if (m.bits[w] & mask) != mask {
+			// Not all bits are set, find the highest set bit in this range.
+			// Use bit functions
+			bits.LeadingZeros64(m.bits[w] & mask)
+			highestBit := 63 - bits.LeadingZeros64(m.bits[w]&mask)
+			return (w << 6) + uint32(highestBit), true
+		}
+		start += 64 - b
+		w++ // Move to the next word for the next phase.
+	}
+
+	// Now 'start' is aligned to a word boundary. Check whole words until we reach 'end'.
+	ew := end >> 6
+	for w < ew {
+		if m.bits[w] != ^uint64(0) {
+			// Not all bits in this word are set, find the highest set bit.
+			highestBit := 63 - bits.LeadingZeros64(m.bits[w])
+			return (w << 6) + uint32(highestBit), true
+		}
+		w++
+	}
+
+	// Now check the tail if 'end' is not word-aligned.
+	if end&63 != 0 {
+		w = end >> 6
+		mask := ^uint64(0) >> (64 - (end & 63))
+		if (m.bits[w] & mask) != mask {
+			// Not all bits are set, find the highest set bit in this range.
+			highestBit := 63 - bits.LeadingZeros64(m.bits[w]&mask)
+			return (w << 6) + uint32(highestBit), true
+		}
+	}
+
+	// If we reached here, all bits in the range [start, end) are set.
+	return end - 1, true
+}
+
 func (m *SequenceMap) RemoveRange(start, end uint32) {
 	if start >= end || start >= m.maxSeq {
 		return

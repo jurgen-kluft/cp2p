@@ -2,12 +2,21 @@ package main
 
 type CC interface {
 	OnPacketSent(seq uint32, nowUs uint64)
-	OnPacketReceived(seq uint32, nowUs uint64)
+	OnMissingPacketSent(seq uint32, nowUs uint64)
 	OnAck(ackSeq uint32, nowUs uint64)
 	OnLoss(seq uint32, lossCount uint32, nowUs uint64)
 	OnTimeout(nowUs uint64)
 	BudgetBeforeCongestion() uint32
 	PacingTimeoutUs(nowUs uint64, lastTxUs uint64) uint64
+	Snapshot() CCSnapshot
+}
+
+type CCSnapshot struct {
+	Cwnd      uint32
+	InFlight  uint32
+	Budget    uint32
+	PacingUs  uint64
+	SlowStart bool
 }
 
 type UDTCC struct {
@@ -24,32 +33,32 @@ type UDTCC struct {
 	lastRCUs     uint64
 }
 
-func NewUDTCC(initialCwnd uint32) *UDTCC {
+func NewUDTCC(initialCwnd uint32, minPacingUs uint64) *UDTCC {
 	return &UDTCC{
 		cwnd:         initialCwnd,
 		minCwnd:      2,
 		maxCwnd:      8192,
-		pacingUs:     1,
+		pacingUs:     minPacingUs,
 		slowStart:    true,
 		rcIntervalUs: 10000,
 	}
 }
 
 func (c *UDTCC) OnPacketSent(_ uint32, nowUs uint64) {
-	if c.inFlight < ^uint32(0) {
-		c.inFlight++
-	}
+	c.inFlight++
 	c.nextSendUs = nowUs + c.pacingUs
 }
 
-func (c *UDTCC) OnPacketReceived(_ uint32, _ uint64) {}
+func (c *UDTCC) OnMissingPacketSent(_ uint32, nowUs uint64) {
+	c.nextSendUs = nowUs + c.pacingUs
+}
 
 func (c *UDTCC) OnAck(ackSeq uint32, nowUs uint64) {
 	var acked uint32 = 0
 	if ackSeq > c.lastAckSeq {
 		acked = ackSeq - c.lastAckSeq
+		c.lastAckSeq = ackSeq
 	}
-	c.lastAckSeq = ackSeq
 	if acked == 0 {
 		if c.nextSendUs < nowUs {
 			c.nextSendUs = nowUs
@@ -144,22 +153,16 @@ func (c *UDTCC) PacingTimeoutUs(nowUs uint64, lastTxUs uint64) uint64 {
 	return next
 }
 
-func clampU32(v, lo, hi uint32) uint32 {
-	if v < lo {
-		return lo
+func (c *UDTCC) Snapshot() CCSnapshot {
+	budget := uint32(0)
+	if c.inFlight < c.cwnd {
+		budget = c.cwnd - c.inFlight
 	}
-	if v > hi {
-		return hi
+	return CCSnapshot{
+		Cwnd:      c.cwnd,
+		InFlight:  c.inFlight,
+		Budget:    budget,
+		PacingUs:  c.pacingUs,
+		SlowStart: c.slowStart,
 	}
-	return v
-}
-
-func clampU64(v, lo, hi uint64) uint64 {
-	if v < lo {
-		return lo
-	}
-	if v > hi {
-		return hi
-	}
-	return v
 }
