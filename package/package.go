@@ -34,7 +34,7 @@ func GetPackage() *denv.Package {
 
 	// 'cp2p' unittest project
 	maintest := denv.SetupCppTestProject(mainpkg, name)
-	maintest.AddDependencies(cunittestpkg.GetMainLib())
+	maintest.AddDependencies(cunittestpkg.GetTestLib())
 	maintest.AddDependency(testlib)
 
 	mainpkg.AddMainLib(mainlib)
